@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'routes.dart';
 
-void main() => runApp(MyApp());
-
 class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
@@ -12,7 +12,7 @@ class MyApp extends StatelessWidget {
         primarySwatch: Colors.blue,
       ),
       initialRoute: '/inventory',
-      routes: routes,
+      routes: Routes.routes,
     );
   }
 }
