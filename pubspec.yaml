@@ -1,0 +1,14 @@
+name: flutter_app
+
+version: 1.0.0
+
+description: A Flutter app with offline SQLite setup and navigation.
+
+dependencies:
+  flutter:
+    sdk: flutter
+  sqflite: ^2.0.0+4
+  path_provider: ^2.0.5
+
+flutter:
+  uses-material-design: true
