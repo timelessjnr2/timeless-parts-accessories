@@ -1,35 +1,61 @@
 import 'package:flutter/material.dart';
 
 class AppDrawer extends StatelessWidget {
-  final String companyName = 'Timeless Auto Imports Limited';
-  final String tagline = "Don't Just Dream, Drive it";
-  final String phone = '876 403 8436';
-  final String email = 'timelessautoimportslimited@gmail.com';
-  final String address = 'Lot 36 Bustamante Highway, May Pen, Clarendon';
-
   @override
   Widget build(BuildContext context) {
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: <Widget>[ 
-          UserAccountsDrawerHeader(
-            accountName: Text(companyName),
-            accountEmail: Text(email),
-            decoration: BoxDecoration(
-              color: Colors.blue,
+      child: Column(
+        children: <Widget>[
+          // Company Info
+          Container(
+            padding: EdgeInsets.all(16.0),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Company Name', style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold)),
+                Text('Company Tagline', style: TextStyle(fontSize: 16)),
+                Text('Phone: (123) 456-7890'),
+                Text('Email: info@company.com'),
+                Text('Address: 123 Business Rd, City, State, 12345'),
+              ],
             ),
-            otherAccountsPictures: [CircleAvatar(child: Text("T"))],
+          ),
+          Divider(),
+          // Navigation List
+          ListTile(
+            title: Text('Inventory'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/inventory');
+            },
           ),
           ListTile(
-            title: Text('Tagline'),
-            subtitle: Text(tagline),
+            title: Text('Vehicles'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/vehicles');
+            },
           ),
           ListTile(
-            title: Text('Phone: ' + phone),
+            title: Text('Invoices'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/invoices');
+            },
           ),
           ListTile(
-            title: Text('Address: ' + address),
+            title: Text('Customers'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/customers');
+            },
+          ),
+          ListTile(
+            title: Text('Settings'),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.pushReplacementNamed(context, '/settings');
+            },
           ),
         ],
       ),
