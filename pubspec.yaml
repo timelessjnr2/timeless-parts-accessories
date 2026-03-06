@@ -1,7 +1,11 @@
+name: timeless_parts_accessories
+version: 1.0.0
+description: A new Flutter package
+
+flutter:
+  uses-material-design: true
+
 dependencies:
-  flutter:
-    sdk: flutter
-  sqflite: ^X.X.X
-  path_provider: ^X.X.X
+  sqflite: ^2.0.0+4
+  path_provider: ^2.0.5
   path: ^1.9.0
-  # Other dependencies...
