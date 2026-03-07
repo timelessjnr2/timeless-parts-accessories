@@ -547,8 +547,8 @@ async def get_vehicle_models(make: str):
 async def get_dashboard_stats():
     # Total inventory value
     parts = await db.parts.find({}, {"_id": 0, "price": 1, "quantity": 1, "cost_price": 1}).to_list(10000)
-    total_inventory_value = sum(p.get('price', 0) * p.get('quantity', 0) for p in parts)
-    total_cost_value = sum(p.get('cost_price', p.get('price', 0)) * p.get('quantity', 0) for p in parts)
+    total_inventory_value = sum((p.get('price') or 0) * (p.get('quantity') or 0) for p in parts)
+    total_cost_value = sum((p.get('cost_price') or p.get('price') or 0) * (p.get('quantity') or 0) for p in parts)
     
     # Total parts count
     total_parts = await db.parts.count_documents({})
