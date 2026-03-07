@@ -1,0 +1,155 @@
+{
+  "project_name": "Timeless Parts and Accessories",
+  "design_philosophy": {
+    "archetype": "The Performance Pro",
+    "vibe": "Industrial, Precision, High-Utility, Clean",
+    "core_values": [
+      "Clarity over Decoration",
+      "Density for Data",
+      "Speed of Operation",
+      "Print Fidelity"
+    ]
+  },
+  "typography": {
+    "primary_font": "Manrope",
+    "heading_font": "Barlow Condensed",
+    "mono_font": "JetBrains Mono",
+    "scale": {
+      "h1": "text-4xl font-bold tracking-tight uppercase",
+      "h2": "text-2xl font-semibold tracking-tight uppercase",
+      "h3": "text-xl font-medium",
+      "body": "text-sm leading-relaxed",
+      "small": "text-xs font-medium text-muted-foreground",
+      "mono": "font-mono text-xs tracking-wide"
+    }
+  },
+  "colors": {
+    "theme": "light",
+    "palette": {
+      "background": "#F8F9FA",
+      "foreground": "#0F172A",
+      "card": "#FFFFFF",
+      "card_foreground": "#0F172A",
+      "primary": "#0F172A",
+      "primary_foreground": "#FFFFFF",
+      "secondary": "#E2E8F0",
+      "secondary_foreground": "#0F172A",
+      "muted": "#F1F5F9",
+      "muted_foreground": "#64748B",
+      "accent": "#F1F5F9",
+      "accent_foreground": "#0F172A",
+      "destructive": "#EF4444",
+      "destructive_foreground": "#FFFFFF",
+      "border": "#E2E8F0",
+      "input": "#E2E8F0",
+      "ring": "#0F172A",
+      "chart_1": "#0F172A",
+      "chart_2": "#64748B",
+      "chart_3": "#94A3B8",
+      "chart_4": "#CBD5E1",
+      "chart_5": "#E2E8F0"
+    },
+    "custom_colors": {
+      "sidebar_bg": "#0F172A",
+      "sidebar_fg": "#F8FAFC",
+      "sidebar_border": "#1E293B",
+      "invoice_paper": "#FFFFFF",
+      "low_stock_bg": "#FEF2F2",
+      "low_stock_text": "#DC2626"
+    }
+  },
+  "layout": {
+    "structure": "Sidebar Navigation + Main Content Area",
+    "grid_system": "Responsive 12-column grid",
+    "spacing": {
+      "container_padding": "p-6 md:p-8",
+      "section_gap": "gap-6",
+      "component_gap": "gap-4"
+    },
+    "sidebar": {
+      "width": "w-64",
+      "behavior": "Fixed left, collapsible on mobile"
+    }
+  },
+  "components": {
+    "cards": {
+      "style": "flat",
+      "border": "border border-border",
+      "radius": "rounded-lg",
+      "shadow": "shadow-sm",
+      "hover": "hover:shadow-md transition-shadow duration-200"
+    },
+    "tables": {
+      "style": "dense",
+      "header_bg": "bg-muted/50",
+      "row_hover": "hover:bg-muted/50",
+      "border": "border-b"
+    },
+    "buttons": {
+      "primary": "bg-primary text-primary-foreground hover:bg-primary/90 rounded-md px-4 py-2 font-medium uppercase tracking-wide text-xs",
+      "secondary": "bg-secondary text-secondary-foreground hover:bg-secondary/80 rounded-md px-4 py-2 font-medium uppercase tracking-wide text-xs",
+      "outline": "border border-input bg-background hover:bg-accent hover:text-accent-foreground rounded-md px-4 py-2 font-medium uppercase tracking-wide text-xs",
+      "ghost": "hover:bg-accent hover:text-accent-foreground rounded-md px-4 py-2 font-medium"
+    },
+    "inputs": {
+      "style": "flat",
+      "border": "border-input",
+      "focus": "ring-2 ring-ring ring-offset-2",
+      "radius": "rounded-md",
+      "bg": "bg-background"
+    }
+  },
+  "visual_enhancers": {
+    "textures": "Subtle noise texture on sidebar background to give 'matte' finish",
+    "borders": "1px solid borders, crisp edges",
+    "shadows": "Very minimal, mainly for dropdowns and modals",
+    "icons": "Lucide React (Stroke width 1.5px for elegance)"
+  },
+  "assets": {
+    "logo_url": "https://customer-assets.emergentagent.com/job_c8ea836d-f376-4793-85ac-d42fefdf5d7d/artifacts/mxjzjbvw_WhatsApp%20Image%202026-03-05%20at%204.13.42%20PM.jpeg",
+    "invoice_reference_url": "https://customer-assets.emergentagent.com/job_c8ea836d-f376-4793-85ac-d42fefdf5d7d/artifacts/7v4894md_WhatsApp%20Image%202026-03-07%20at%201.11.26%20PM.jpeg",
+    "policies_reference_url": "https://customer-assets.emergentagent.com/job_c8ea836d-f376-4793-85ac-d42fefdf5d7d/artifacts/jwcoqo7a_WhatsApp%20Image%202026-03-07%20at%202.12.15%20PM.jpeg"
+  },
+  "pages": {
+    "dashboard": {
+      "layout": "Bento Grid (Mode B - High Density)",
+      "widgets": [
+        "Total Inventory Value (Card)",
+        "Low Stock Alerts (List - High Priority)",
+        "Recent Sales (Table)",
+        "Sales Trend (Bar Chart)"
+      ]
+    },
+    "inventory": {
+      "layout": "Data Table with Filters",
+      "features": [
+        "Search by Name/Part#/Car",
+        "Filter by Category/Stock Level",
+        "Add Part Modal",
+        "Edit/Delete Actions"
+      ]
+    },
+    "invoices": {
+      "layout": "Split View (List of Invoices | Invoice Preview)",
+      "create_flow": "Step-by-step or Single Form",
+      "print_style": "A4 Paper CSS Media Query"
+    }
+  },
+  "instructions_to_main_agent": [
+    "INSTALL FONTS: Add '@fontsource/manrope', '@fontsource/barlow-condensed', '@fontsource/jetbrains-mono' to package.json and import in index.js",
+    "THEME SETUP: Update tailwind.config.js with the colors defined in this JSON. Use CSS variables in index.css for theme switching capability.",
+    "SIDEBAR: Create a persistent 'AppSidebar' component. Use a dark theme for the sidebar (#0F172A) to contrast with the light content area.",
+    "INVOICE PRINTING: Create a dedicated route '/invoice/print/:id' that renders the invoice in a clean, print-friendly format. Use `@media print` CSS to hide sidebar/buttons and ensure 100% width.",
+    "DATA FETCHING: Use `tanstack-query` (react-query) for all API calls. Mock the API calls for now if backend is not ready, but structure them properly.",
+    "FORMS: Use `react-hook-form` and `zod` for validation. This is CRITICAL for the inventory add/edit forms.",
+    "NOTIFICATIONS: Use `sonner` for success/error toasts.",
+    "DATA-TESTID: Add `data-testid` to all interactive elements (buttons, inputs, rows) for testing."
+  ],
+  "universal_guidelines": [
+    "Do NOT use gradients for backgrounds. Keep it flat and clean.",
+    "Do NOT use 'Inter' font. Use 'Manrope' for body and 'Barlow Condensed' for headings.",
+    "Ensure high contrast for all text. No light gray text on white backgrounds.",
+    "Use 'Lucide React' for icons. Keep them simple and consistent.",
+    "The 'Timeless' brand implies durability. UI should feel stable, not floating or bouncy."
+  ]
+}
