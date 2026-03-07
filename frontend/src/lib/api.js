@@ -20,6 +20,7 @@ export const partsApi = {
   adjustStock: (id, adjustment) =>
     api.post(`/parts/${id}/adjust-stock?adjustment=${adjustment}`),
   getCategories: () => api.get("/parts/categories/list"),
+  getFrequentlyUsed: (limit = 6) => api.get(`/parts/frequently-used?limit=${limit}`),
 };
 
 // Customers API

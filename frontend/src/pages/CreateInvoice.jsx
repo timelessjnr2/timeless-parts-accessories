@@ -8,12 +8,15 @@ import {
   User,
   Package,
   Calculator,
+  Star,
+  Zap,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Select,
   SelectContent,
@@ -42,6 +45,7 @@ import { formatCurrency } from "@/lib/utils";
 export default function CreateInvoice() {
   const navigate = useNavigate();
   const [parts, setParts] = useState([]);
+  const [frequentParts, setFrequentParts] = useState([]);
   const [customers, setCustomers] = useState([]);
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -68,14 +72,16 @@ export default function CreateInvoice() {
 
   const fetchData = async () => {
     try {
-      const [partsRes, customersRes, settingsRes] = await Promise.all([
+      const [partsRes, customersRes, settingsRes, frequentRes] = await Promise.all([
         partsApi.getAll({}),
         customersApi.getAll({}),
         settingsApi.get(),
+        partsApi.getFrequentlyUsed(6),
       ]);
       setParts(partsRes.data);
       setCustomers(customersRes.data);
       setSettings(settingsRes.data);
+      setFrequentParts(frequentRes.data);
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to load data");
@@ -349,6 +355,60 @@ export default function CreateInvoice() {
               </div>
             </CardContent>
           </Card>
+
+          {/* Frequently Used Parts - Quick Add */}
+          {frequentParts.length > 0 && (
+            <Card className="border-dashed border-2 bg-muted/30">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2 text-lg">
+                  <Zap className="h-5 w-5 text-amber-500" />
+                  Quick Add - Frequently Used Parts
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                  {frequentParts.map((part) => (
+                    <button
+                      key={part.id}
+                      onClick={() => addPart(part)}
+                      disabled={part.quantity < 1}
+                      className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                      data-testid={`quick-add-${part.id}`}
+                    >
+                      {part.image_url ? (
+                        <img
+                          src={part.image_url}
+                          alt={part.name}
+                          className="w-10 h-10 object-cover rounded"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 bg-muted rounded flex items-center justify-center flex-shrink-0">
+                          <Package className="h-5 w-5 text-muted-foreground" />
+                        </div>
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{part.name}</p>
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-muted-foreground font-mono">
+                            {part.part_number}
+                          </span>
+                          {part.total_sold > 0 && (
+                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
+                              <Star className="h-3 w-3 mr-0.5" />
+                              {part.total_sold} sold
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-sm font-semibold text-primary mt-0.5">
+                          {formatCurrency(part.price)}
+                        </p>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Items */}
           <Card>

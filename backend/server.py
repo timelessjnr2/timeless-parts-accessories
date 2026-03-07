@@ -254,6 +254,58 @@ async def get_parts(
     
     return parts
 
+@api_router.get("/parts/categories/list")
+async def get_categories():
+    categories = await db.parts.distinct("category")
+    return [c for c in categories if c]
+
+@api_router.get("/parts/frequently-used")
+async def get_frequently_used_parts(limit: int = 6):
+    """Get most frequently sold parts based on invoice history"""
+    # Aggregate invoice items to count part sales
+    pipeline = [
+        {"$unwind": "$items"},
+        {"$group": {
+            "_id": "$items.part_id",
+            "total_sold": {"$sum": "$items.quantity"},
+            "times_ordered": {"$sum": 1}
+        }},
+        {"$sort": {"total_sold": -1}},
+        {"$limit": limit}
+    ]
+    
+    sales_data = await db.invoices.aggregate(pipeline).to_list(limit)
+    
+    if not sales_data:
+        # If no sales history, return parts with highest stock
+        parts = await db.parts.find({}, {"_id": 0}).sort("quantity", -1).to_list(limit)
+        return parts
+    
+    # Get full part details for the frequently sold parts
+    part_ids = [s["_id"] for s in sales_data]
+    parts = await db.parts.find({"id": {"$in": part_ids}}, {"_id": 0}).to_list(limit)
+    
+    # Create a lookup for sales data
+    sales_lookup = {s["_id"]: s for s in sales_data}
+    
+    # Add sales info to parts and sort by total sold
+    for part in parts:
+        sale_info = sales_lookup.get(part["id"], {})
+        part["total_sold"] = sale_info.get("total_sold", 0)
+        part["times_ordered"] = sale_info.get("times_ordered", 0)
+    
+    # Sort by total sold
+    parts.sort(key=lambda x: x.get("total_sold", 0), reverse=True)
+    
+    # Convert datetime fields
+    for part in parts:
+        if isinstance(part.get('created_at'), str):
+            part['created_at'] = datetime.fromisoformat(part['created_at'])
+        if isinstance(part.get('updated_at'), str):
+            part['updated_at'] = datetime.fromisoformat(part['updated_at'])
+    
+    return parts
+
 @api_router.get("/parts/{part_id}", response_model=Part)
 async def get_part(part_id: str):
     part = await db.parts.find_one({"id": part_id}, {"_id": 0})
@@ -323,11 +375,6 @@ async def adjust_stock(part_id: str, adjustment: int):
     )
     
     return {"message": "Stock adjusted", "new_quantity": new_quantity}
-
-@api_router.get("/parts/categories/list")
-async def get_categories():
-    categories = await db.parts.distinct("category")
-    return [c for c in categories if c]
 
 # ---- Customer Routes ----
 
