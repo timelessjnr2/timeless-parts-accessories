@@ -21,35 +21,35 @@ h1, h2, h3, h4, h5, h6 {
 
 @layer base {
     :root {
-        --background: 210 20% 98%;
-        --foreground: 222 47% 11%;
+        --background: 0 0% 98%;
+        --foreground: 0 0% 10%;
         --card: 0 0% 100%;
-        --card-foreground: 222 47% 11%;
+        --card-foreground: 0 0% 10%;
         --popover: 0 0% 100%;
-        --popover-foreground: 222 47% 11%;
-        --primary: 222 47% 11%;
-        --primary-foreground: 210 40% 98%;
-        --secondary: 214 32% 91%;
-        --secondary-foreground: 222 47% 11%;
-        --muted: 210 40% 96%;
-        --muted-foreground: 215 16% 47%;
-        --accent: 210 40% 96%;
-        --accent-foreground: 222 47% 11%;
+        --popover-foreground: 0 0% 10%;
+        --primary: 0 72% 51%;
+        --primary-foreground: 0 0% 100%;
+        --secondary: 0 0% 96%;
+        --secondary-foreground: 0 0% 10%;
+        --muted: 0 0% 96%;
+        --muted-foreground: 0 0% 45%;
+        --accent: 0 0% 96%;
+        --accent-foreground: 0 0% 10%;
         --destructive: 0 84% 60%;
-        --destructive-foreground: 210 40% 98%;
-        --border: 214 32% 91%;
-        --input: 214 32% 91%;
-        --ring: 222 47% 11%;
-        --chart-1: 222 47% 11%;
-        --chart-2: 215 16% 47%;
-        --chart-3: 215 19% 65%;
-        --chart-4: 214 32% 80%;
-        --chart-5: 214 32% 91%;
+        --destructive-foreground: 0 0% 98%;
+        --border: 0 0% 90%;
+        --input: 0 0% 90%;
+        --ring: 0 72% 51%;
+        --chart-1: 0 72% 51%;
+        --chart-2: 0 50% 60%;
+        --chart-3: 0 40% 70%;
+        --chart-4: 0 30% 80%;
+        --chart-5: 0 20% 90%;
         --radius: 0.5rem;
         
-        --sidebar-bg: 222 47% 11%;
-        --sidebar-fg: 210 40% 98%;
-        --sidebar-border: 217 33% 17%;
+        --sidebar-bg: 0 72% 45%;
+        --sidebar-fg: 0 0% 100%;
+        --sidebar-border: 0 72% 35%;
         --low-stock-bg: 0 86% 97%;
         --low-stock-text: 0 72% 51%;
     }
@@ -66,7 +66,7 @@ h1, h2, h3, h4, h5, h6 {
 
 /* Sidebar styling */
 .sidebar {
-    background-color: hsl(var(--sidebar-bg));
+    background-color: hsl(0 72% 45%);
     color: hsl(var(--sidebar-fg));
 }
 
@@ -75,11 +75,11 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar-item:hover {
-    background-color: hsl(217 33% 17%);
+    background-color: hsl(0 72% 40%);
 }
 
 .sidebar-item.active {
-    background-color: hsl(217 33% 20%);
+    background-color: hsl(0 72% 35%);
 }
 
 /* Table styling */

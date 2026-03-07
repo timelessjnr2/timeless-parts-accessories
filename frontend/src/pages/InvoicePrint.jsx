@@ -69,7 +69,7 @@ export default function InvoicePrint() {
         data-testid="invoice-print-container"
       >
         {/* Header */}
-        <div className="p-6 border-b-2 border-slate-900">
+        <div className="p-6 border-b-2 border-red-600">
           <div className="flex justify-between items-start">
             {/* Logo & Company Info */}
             <div className="flex items-start gap-4">
