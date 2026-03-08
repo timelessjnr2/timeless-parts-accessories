@@ -259,29 +259,29 @@ export default function CreateInvoice() {
   }
 
   return (
-    <div className="space-y-6 fade-in" data-testid="create-invoice-page">
+    <div className="space-y-4 md:space-y-6 fade-in" data-testid="create-invoice-page">
       {/* Header */}
       <div>
-        <h1 className="text-4xl font-bold tracking-tight uppercase font-['Barlow_Condensed']">
+        <h1 className="text-2xl md:text-4xl font-bold tracking-tight uppercase font-['Barlow_Condensed']">
           Create Invoice
         </h1>
-        <p className="text-muted-foreground mt-1">
+        <p className="text-muted-foreground text-sm md:text-base mt-1">
           Create a new invoice for a customer
         </p>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
         {/* Left Column - Customer & Items */}
-        <div className="lg:col-span-2 space-y-6">
+        <div className="lg:col-span-2 space-y-4 md:space-y-6">
           {/* Customer Selection */}
           <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <User className="h-5 w-5" />
+            <CardHeader className="p-4 md:p-6">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <User className="h-4 w-4 md:h-5 md:w-5" />
                 Customer Information
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-4">
+            <CardContent className="p-4 pt-0 md:p-6 md:pt-0 space-y-4">
               <div className="relative">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
@@ -310,7 +310,7 @@ export default function CreateInvoice() {
                 )}
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Customer Name *</Label>
                   <Input
@@ -359,47 +359,36 @@ export default function CreateInvoice() {
           {/* Frequently Used Parts - Quick Add */}
           {frequentParts.length > 0 && (
             <Card className="border-dashed border-2 bg-muted/30">
-              <CardHeader className="pb-3">
-                <CardTitle className="flex items-center gap-2 text-lg">
-                  <Zap className="h-5 w-5 text-amber-500" />
-                  Quick Add - Frequently Used Parts
+              <CardHeader className="pb-3 p-4 md:p-6 md:pb-3">
+                <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                  <Zap className="h-4 w-4 md:h-5 md:w-5 text-amber-500" />
+                  Quick Add
                 </CardTitle>
               </CardHeader>
-              <CardContent>
-                <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <CardContent className="p-4 pt-0 md:p-6 md:pt-0">
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 md:gap-3">
                   {frequentParts.map((part) => (
                     <button
                       key={part.id}
                       onClick={() => addPart(part)}
                       disabled={part.quantity < 1}
-                      className="flex items-center gap-3 p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                      className="flex items-center gap-2 md:gap-3 p-2 md:p-3 rounded-lg border bg-card hover:bg-muted/50 transition-colors text-left disabled:opacity-50 disabled:cursor-not-allowed"
                       data-testid={`quick-add-${part.id}`}
                     >
                       {part.image_url ? (
                         <img
                           src={part.image_url}
                           alt={part.name}
-                          className="w-10 h-10 object-cover rounded"
+                          className="w-8 h-8 md:w-10 md:h-10 object-cover rounded"
                         />
                       ) : (
-                        <div className="w-10 h-10 bg-muted rounded flex items-center justify-center flex-shrink-0">
-                          <Package className="h-5 w-5 text-muted-foreground" />
+                        <div className="w-8 h-8 md:w-10 md:h-10 bg-muted rounded flex items-center justify-center flex-shrink-0">
+                          <Package className="h-4 w-4 md:h-5 md:w-5 text-muted-foreground" />
                         </div>
                       )}
                       <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm truncate">{part.name}</p>
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs text-muted-foreground font-mono">
-                            {part.part_number}
-                          </span>
-                          {part.total_sold > 0 && (
-                            <Badge variant="secondary" className="text-xs px-1.5 py-0">
-                              <Star className="h-3 w-3 mr-0.5" />
-                              {part.total_sold} sold
-                            </Badge>
-                          )}
-                        </div>
-                        <p className="text-sm font-semibold text-primary mt-0.5">
+                        <p className="font-medium text-xs md:text-sm truncate">{part.name}</p>
+                        <p className="text-xs md:text-sm font-semibold text-primary">
                           {formatCurrency(part.price)}
                         </p>
                       </div>
@@ -412,12 +401,13 @@ export default function CreateInvoice() {
 
           {/* Items */}
           <Card>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Package className="h-5 w-5" />
+            <CardHeader className="flex flex-row items-center justify-between p-4 md:p-6">
+              <CardTitle className="flex items-center gap-2 text-base md:text-lg">
+                <Package className="h-4 w-4 md:h-5 md:w-5" />
                 Invoice Items
               </CardTitle>
               <Button
+                size="sm"
                 onClick={() => setPartDialogOpen(true)}
                 data-testid="add-item-btn"
               >

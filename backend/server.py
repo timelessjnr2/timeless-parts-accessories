@@ -519,6 +519,16 @@ async def update_invoice(invoice_id: str, invoice_update: InvoiceUpdate):
     
     return updated
 
+@api_router.delete("/invoices/clear-all")
+async def clear_all_invoices():
+    """Clear all invoices and reset counter"""
+    await db.invoices.delete_many({})
+    await db.settings.update_one(
+        {"id": "settings"},
+        {"$set": {"invoice_counter": 1}}
+    )
+    return {"message": "All invoices cleared and counter reset"}
+
 # ---- Settings Routes ----
 
 @api_router.get("/settings")

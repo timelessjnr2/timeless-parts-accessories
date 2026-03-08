@@ -59,19 +59,19 @@ export default function Dashboard() {
   }
 
   return (
-    <div className="space-y-6 fade-in" data-testid="dashboard">
+    <div className="space-y-4 md:space-y-6 fade-in" data-testid="dashboard">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-4xl font-bold tracking-tight uppercase font-['Barlow_Condensed']">
+          <h1 className="text-2xl md:text-4xl font-bold tracking-tight uppercase font-['Barlow_Condensed']">
             Dashboard
           </h1>
-          <p className="text-muted-foreground mt-1">
+          <p className="text-muted-foreground text-sm md:text-base mt-1">
             Welcome to Timeless Parts & Accessories
           </p>
         </div>
-        <Link to="/invoices/create">
-          <Button data-testid="dashboard-new-invoice-btn">
+        <Link to="/invoices/create" className="w-full sm:w-auto">
+          <Button className="w-full sm:w-auto" data-testid="dashboard-new-invoice-btn">
             <FileText className="mr-2 h-4 w-4" />
             New Invoice
           </Button>
@@ -79,33 +79,33 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <Card className="stat-card" data-testid="stat-inventory-value">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
               Inventory Value
             </CardTitle>
-            <DollarSign className="h-4 w-4 text-muted-foreground" />
+            <DollarSign className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-lg md:text-2xl font-bold">
               {formatCurrency(stats?.total_inventory_value || 0)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              {stats?.total_parts || 0} parts in stock
+              {stats?.total_parts || 0} parts
             </p>
           </CardContent>
         </Card>
 
         <Card className="stat-card" data-testid="stat-monthly-sales">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
               Monthly Sales
             </CardTitle>
-            <TrendingUp className="h-4 w-4 text-muted-foreground" />
+            <TrendingUp className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-lg md:text-2xl font-bold">
               {formatCurrency(stats?.monthly_sales || 0)}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -115,14 +115,14 @@ export default function Dashboard() {
         </Card>
 
         <Card className="stat-card" data-testid="stat-customers">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
               Customers
             </CardTitle>
-            <Users className="h-4 w-4 text-muted-foreground" />
+            <Users className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-lg md:text-2xl font-bold">
               {stats?.total_customers || 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">
@@ -132,14 +132,14 @@ export default function Dashboard() {
         </Card>
 
         <Card className="stat-card" data-testid="stat-invoices">
-          <CardHeader className="flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
+          <CardHeader className="flex flex-row items-center justify-between pb-2 p-3 md:p-6 md:pb-2">
+            <CardTitle className="text-xs md:text-sm font-medium text-muted-foreground">
               Total Invoices
             </CardTitle>
-            <FileText className="h-4 w-4 text-muted-foreground" />
+            <FileText className="h-4 w-4 text-muted-foreground hidden sm:block" />
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <div className="text-lg md:text-2xl font-bold">
               {stats?.total_invoices || 0}
             </div>
             <p className="text-xs text-muted-foreground mt-1">All time</p>
@@ -148,7 +148,7 @@ export default function Dashboard() {
       </div>
 
       {/* Low Stock Alert & Recent Invoices */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
         {/* Low Stock Alert */}
         <Card data-testid="low-stock-card">
           <CardHeader className="flex flex-row items-center justify-between">
