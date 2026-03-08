@@ -11,6 +11,13 @@ from typing import List, Optional
 import uuid
 from datetime import datetime, timezone
 import base64
+import hashlib
+
+# Admin password for edit/delete operations
+ADMIN_PASSWORD = "timeless532002"
+
+def verify_password(password: str) -> bool:
+    return password == ADMIN_PASSWORD
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -175,6 +182,9 @@ class VehicleCreate(BaseModel):
     model: str
     years: List[int] = []
 
+class PasswordVerify(BaseModel):
+    password: str
+
 # ==================== HELPER FUNCTIONS ====================
 
 async def get_next_invoice_number():
@@ -212,6 +222,12 @@ async def init_settings():
 @api_router.get("/")
 async def root():
     return {"message": "Timeless Parts and Accessories API"}
+
+@api_router.post("/verify-password")
+async def verify_admin_password(data: PasswordVerify):
+    if verify_password(data.password):
+        return {"verified": True}
+    raise HTTPException(status_code=401, detail="Invalid password")
 
 # ---- Parts Routes ----
 

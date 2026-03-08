@@ -48,8 +48,10 @@ import {
 import { toast } from "sonner";
 import { partsApi, uploadApi, vehiclesApi } from "@/lib/api";
 import { formatCurrency } from "@/lib/utils";
+import { usePassword } from "@/contexts/PasswordContext";
 
 export default function Inventory() {
+  const { requirePassword } = usePassword();
   const [parts, setParts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [vehicles, setVehicles] = useState([]);
@@ -102,21 +104,28 @@ export default function Inventory() {
     }
   };
 
-  const handleOpenDialog = (part = null) => {
+  const handleOpenDialog = async (part = null) => {
     if (part) {
-      setEditingPart(part);
-      setFormData({
-        name: part.name,
-        part_number: part.part_number,
-        description: part.description || "",
-        price: part.price.toString(),
-        cost_price: part.cost_price?.toString() || "",
-        quantity: part.quantity.toString(),
-        min_stock_level: part.min_stock_level.toString(),
-        category: part.category || "",
-        image_url: part.image_url || "",
-        compatible_vehicles: part.compatible_vehicles || [],
-      });
+      // Require password for editing
+      try {
+        await requirePassword("Enter password to edit this part", async () => {});
+        setEditingPart(part);
+        setFormData({
+          name: part.name,
+          part_number: part.part_number,
+          description: part.description || "",
+          price: part.price.toString(),
+          cost_price: part.cost_price?.toString() || "",
+          quantity: part.quantity.toString(),
+          min_stock_level: part.min_stock_level.toString(),
+          category: part.category || "",
+          image_url: part.image_url || "",
+          compatible_vehicles: part.compatible_vehicles || [],
+        });
+        setDialogOpen(true);
+      } catch (error) {
+        // User cancelled or wrong password
+      }
     } else {
       setEditingPart(null);
       setFormData({
@@ -131,8 +140,8 @@ export default function Inventory() {
         image_url: "",
         compatible_vehicles: [],
       });
+      setDialogOpen(true);
     }
-    setDialogOpen(true);
   };
 
   const handleImageUpload = async (e) => {
@@ -178,13 +187,17 @@ export default function Inventory() {
     if (!partToDelete) return;
 
     try {
-      await partsApi.delete(partToDelete.id);
-      toast.success("Part deleted successfully");
-      setDeleteDialogOpen(false);
-      setPartToDelete(null);
-      fetchData();
+      await requirePassword("Enter password to delete this part", async () => {
+        await partsApi.delete(partToDelete.id);
+        toast.success("Part deleted successfully");
+        setDeleteDialogOpen(false);
+        setPartToDelete(null);
+        fetchData();
+      });
     } catch (error) {
-      toast.error("Failed to delete part");
+      if (error.message !== "Cancelled") {
+        toast.error("Failed to delete part");
+      }
     }
   };
 

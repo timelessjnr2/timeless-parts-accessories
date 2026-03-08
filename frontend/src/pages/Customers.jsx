@@ -29,8 +29,10 @@ import {
 import { toast } from "sonner";
 import { customersApi } from "@/lib/api";
 import { formatDate } from "@/lib/utils";
+import { usePassword } from "@/contexts/PasswordContext";
 
 export default function Customers() {
+  const { requirePassword } = usePassword();
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -62,15 +64,22 @@ export default function Customers() {
     }
   };
 
-  const handleOpenDialog = (customer = null) => {
+  const handleOpenDialog = async (customer = null) => {
     if (customer) {
-      setEditingCustomer(customer);
-      setFormData({
-        name: customer.name,
-        phone: customer.phone || "",
-        email: customer.email || "",
-        address: customer.address || "",
-      });
+      // Require password for editing
+      try {
+        await requirePassword("Enter password to edit this customer", async () => {});
+        setEditingCustomer(customer);
+        setFormData({
+          name: customer.name,
+          phone: customer.phone || "",
+          email: customer.email || "",
+          address: customer.address || "",
+        });
+        setDialogOpen(true);
+      } catch (error) {
+        // User cancelled or wrong password
+      }
     } else {
       setEditingCustomer(null);
       setFormData({
@@ -79,8 +88,8 @@ export default function Customers() {
         email: "",
         address: "",
       });
+      setDialogOpen(true);
     }
-    setDialogOpen(true);
   };
 
   const handleSubmit = async (e) => {
@@ -107,13 +116,17 @@ export default function Customers() {
     if (!customerToDelete) return;
 
     try {
-      await customersApi.delete(customerToDelete.id);
-      toast.success("Customer deleted successfully");
-      setDeleteDialogOpen(false);
-      setCustomerToDelete(null);
-      fetchCustomers();
+      await requirePassword("Enter password to delete this customer", async () => {
+        await customersApi.delete(customerToDelete.id);
+        toast.success("Customer deleted successfully");
+        setDeleteDialogOpen(false);
+        setCustomerToDelete(null);
+        fetchCustomers();
+      });
     } catch (error) {
-      toast.error("Failed to delete customer");
+      if (error.message !== "Cancelled") {
+        toast.error("Failed to delete customer");
+      }
     }
   };
 

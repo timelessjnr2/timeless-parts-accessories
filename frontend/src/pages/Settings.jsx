@@ -15,8 +15,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { settingsApi } from "@/lib/api";
+import { usePassword } from "@/contexts/PasswordContext";
 
 export default function Settings() {
+  const { requirePassword } = usePassword();
   const [settings, setSettings] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -60,26 +62,38 @@ export default function Settings() {
   };
 
   const handleSaveCompany = async () => {
-    setSaving(true);
     try {
-      await settingsApi.updateCompany(companyForm);
-      toast.success("Company settings saved");
+      await requirePassword("Enter password to save company settings", async () => {
+        setSaving(true);
+        try {
+          await settingsApi.updateCompany(companyForm);
+          toast.success("Company settings saved");
+        } finally {
+          setSaving(false);
+        }
+      });
     } catch (error) {
-      toast.error("Failed to save company settings");
-    } finally {
-      setSaving(false);
+      if (error.message !== "Cancelled") {
+        toast.error("Failed to save company settings");
+      }
     }
   };
 
   const handleSavePolicies = async () => {
-    setSaving(true);
     try {
-      await settingsApi.updatePolicies(policiesForm);
-      toast.success("Policies saved");
+      await requirePassword("Enter password to save policies", async () => {
+        setSaving(true);
+        try {
+          await settingsApi.updatePolicies(policiesForm);
+          toast.success("Policies saved");
+        } finally {
+          setSaving(false);
+        }
+      });
     } catch (error) {
-      toast.error("Failed to save policies");
-    } finally {
-      setSaving(false);
+      if (error.message !== "Cancelled") {
+        toast.error("Failed to save policies");
+      }
     }
   };
 
