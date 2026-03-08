@@ -1,3 +1,4 @@
+# App Version: 2.0.1 - Password Protection + Mobile Optimized
 from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
