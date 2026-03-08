@@ -13,8 +13,8 @@ from datetime import datetime, timezone
 import base64
 import hashlib
 
-# Admin password for edit/delete operations
-ADMIN_PASSWORD = "timeless532002"
+# Admin password from environment variable
+ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'change_me_in_production')
 
 def verify_password(password: str) -> bool:
     return password == ADMIN_PASSWORD
@@ -237,8 +237,13 @@ async def get_parts(
     category: Optional[str] = None,
     low_stock: Optional[bool] = None,
     vehicle_make: Optional[str] = None,
-    vehicle_model: Optional[str] = None
+    vehicle_model: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100
 ):
+    # Cap limit to prevent memory issues
+    limit = min(limit, 500)
+    
     query = {}
     
     if search:
@@ -257,10 +262,27 @@ async def get_parts(
     if vehicle_model:
         query["compatible_vehicles.model"] = {"$regex": vehicle_model, "$options": "i"}
     
-    parts = await db.parts.find(query, {"_id": 0}).to_list(1000)
-    
+    # Use aggregation for low_stock filter
     if low_stock:
-        parts = [p for p in parts if p.get('quantity', 0) <= p.get('min_stock_level', 5)]
+        pipeline = [
+            {"$match": query} if query else {"$match": {}},
+            {
+                "$match": {
+                    "$expr": {
+                        "$lte": [
+                            {"$ifNull": ["$quantity", 0]},
+                            {"$ifNull": ["$min_stock_level", 5]}
+                        ]
+                    }
+                }
+            },
+            {"$skip": skip},
+            {"$limit": limit},
+            {"$project": {"_id": 0}}
+        ]
+        parts = await db.parts.aggregate(pipeline).to_list(limit)
+    else:
+        parts = await db.parts.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
     
     for part in parts:
         if isinstance(part.get('created_at'), str):
@@ -395,7 +417,10 @@ async def adjust_stock(part_id: str, adjustment: int):
 # ---- Customer Routes ----
 
 @api_router.get("/customers", response_model=List[Customer])
-async def get_customers(search: Optional[str] = None):
+async def get_customers(search: Optional[str] = None, skip: int = 0, limit: int = 100):
+    # Cap limit
+    limit = min(limit, 500)
+    
     query = {}
     if search:
         query["$or"] = [
@@ -404,7 +429,7 @@ async def get_customers(search: Optional[str] = None):
             {"email": {"$regex": search, "$options": "i"}}
         ]
     
-    customers = await db.customers.find(query, {"_id": 0}).to_list(1000)
+    customers = await db.customers.find(query, {"_id": 0}).skip(skip).limit(limit).to_list(limit)
     
     for customer in customers:
         if isinstance(customer.get('created_at'), str):
@@ -462,8 +487,13 @@ async def get_invoices(
     customer_id: Optional[str] = None,
     status: Optional[str] = None,
     start_date: Optional[str] = None,
-    end_date: Optional[str] = None
+    end_date: Optional[str] = None,
+    skip: int = 0,
+    limit: int = 100
 ):
+    # Cap limit
+    limit = min(limit, 500)
+    
     query = {}
     
     if customer_id:
@@ -481,7 +511,7 @@ async def get_invoices(
         else:
             query["created_at"] = {"$lte": end_date}
     
-    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
     
     for invoice in invoices:
         if isinstance(invoice.get('created_at'), str):
@@ -618,17 +648,50 @@ async def get_vehicle_models(make: str):
 
 @api_router.get("/dashboard/stats")
 async def get_dashboard_stats():
-    # Total inventory value
-    parts = await db.parts.find({}, {"_id": 0, "price": 1, "quantity": 1, "cost_price": 1}).to_list(10000)
-    total_inventory_value = sum((p.get('price') or 0) * (p.get('quantity') or 0) for p in parts)
-    total_cost_value = sum((p.get('cost_price') or p.get('price') or 0) * (p.get('quantity') or 0) for p in parts)
+    # Use MongoDB aggregation for inventory stats
+    inventory_pipeline = [
+        {
+            "$group": {
+                "_id": None,
+                "total_inventory_value": {
+                    "$sum": {"$multiply": [{"$ifNull": ["$price", 0]}, {"$ifNull": ["$quantity", 0]}]}
+                },
+                "total_cost_value": {
+                    "$sum": {
+                        "$multiply": [
+                            {"$ifNull": ["$cost_price", {"$ifNull": ["$price", 0]}]},
+                            {"$ifNull": ["$quantity", 0]}
+                        ]
+                    }
+                },
+                "total_parts": {"$sum": 1}
+            }
+        }
+    ]
     
-    # Total parts count
-    total_parts = await db.parts.count_documents({})
+    inventory_result = await db.parts.aggregate(inventory_pipeline).to_list(1)
+    inventory_data = inventory_result[0] if inventory_result else {
+        "total_inventory_value": 0,
+        "total_cost_value": 0,
+        "total_parts": 0
+    }
     
-    # Low stock count
-    all_parts = await db.parts.find({}, {"_id": 0}).to_list(10000)
-    low_stock_count = len([p for p in all_parts if p.get('quantity', 0) <= p.get('min_stock_level', 5)])
+    # Low stock count using aggregation
+    low_stock_pipeline = [
+        {
+            "$match": {
+                "$expr": {
+                    "$lte": [
+                        {"$ifNull": ["$quantity", 0]},
+                        {"$ifNull": ["$min_stock_level", 5]}
+                    ]
+                }
+            }
+        },
+        {"$count": "count"}
+    ]
+    low_stock_result = await db.parts.aggregate(low_stock_pipeline).to_list(1)
+    low_stock_count = low_stock_result[0]["count"] if low_stock_result else 0
     
     # Total customers
     total_customers = await db.customers.count_documents({})
@@ -636,26 +699,35 @@ async def get_dashboard_stats():
     # Total invoices
     total_invoices = await db.invoices.count_documents({})
     
-    # Today's sales
+    # Today's and monthly sales using aggregation
     today = datetime.now(timezone.utc).date().isoformat()
-    today_invoices = await db.invoices.find(
-        {"created_at": {"$regex": f"^{today}"}},
-        {"_id": 0, "total": 1}
-    ).to_list(1000)
-    today_sales = sum(inv.get('total', 0) for inv in today_invoices)
-    
-    # Monthly sales (current month)
     current_month = datetime.now(timezone.utc).strftime("%Y-%m")
-    month_invoices = await db.invoices.find(
-        {"created_at": {"$regex": f"^{current_month}"}},
-        {"_id": 0, "total": 1}
-    ).to_list(10000)
-    monthly_sales = sum(inv.get('total', 0) for inv in month_invoices)
+    
+    sales_pipeline = [
+        {
+            "$facet": {
+                "today": [
+                    {"$match": {"created_at": {"$regex": f"^{today}"}}},
+                    {"$group": {"_id": None, "total": {"$sum": "$total"}}}
+                ],
+                "month": [
+                    {"$match": {"created_at": {"$regex": f"^{current_month}"}}},
+                    {"$group": {"_id": None, "total": {"$sum": "$total"}}}
+                ]
+            }
+        }
+    ]
+    
+    sales_result = await db.invoices.aggregate(sales_pipeline).to_list(1)
+    sales_data = sales_result[0] if sales_result else {"today": [], "month": []}
+    
+    today_sales = sales_data["today"][0]["total"] if sales_data["today"] else 0
+    monthly_sales = sales_data["month"][0]["total"] if sales_data["month"] else 0
     
     return {
-        "total_inventory_value": total_inventory_value,
-        "total_cost_value": total_cost_value,
-        "total_parts": total_parts,
+        "total_inventory_value": inventory_data.get("total_inventory_value", 0),
+        "total_cost_value": inventory_data.get("total_cost_value", 0),
+        "total_parts": inventory_data.get("total_parts", 0),
         "low_stock_count": low_stock_count,
         "total_customers": total_customers,
         "total_invoices": total_invoices,
@@ -665,8 +737,23 @@ async def get_dashboard_stats():
 
 @api_router.get("/dashboard/low-stock")
 async def get_low_stock_parts():
-    parts = await db.parts.find({}, {"_id": 0}).to_list(10000)
-    low_stock = [p for p in parts if p.get('quantity', 0) <= p.get('min_stock_level', 5)]
+    # Use MongoDB $expr to compare fields and limit results
+    pipeline = [
+        {
+            "$match": {
+                "$expr": {
+                    "$lte": [
+                        {"$ifNull": ["$quantity", 0]},
+                        {"$ifNull": ["$min_stock_level", 5]}
+                    ]
+                }
+            }
+        },
+        {"$limit": 50},  # Limit to 50 items
+        {"$project": {"_id": 0}}
+    ]
+    
+    low_stock = await db.parts.aggregate(pipeline).to_list(50)
     
     for part in low_stock:
         if isinstance(part.get('created_at'), str):
