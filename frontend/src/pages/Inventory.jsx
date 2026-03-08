@@ -108,7 +108,7 @@ export default function Inventory() {
     if (part) {
       // Require password for editing
       try {
-        await requirePassword("Enter password to edit this part", async () => {});
+        await requirePassword("Enter password to edit this part");
         setEditingPart(part);
         setFormData({
           name: part.name,
@@ -124,7 +124,8 @@ export default function Inventory() {
         });
         setDialogOpen(true);
       } catch (error) {
-        // User cancelled or wrong password
+        // User cancelled or wrong password - do nothing
+        return;
       }
     } else {
       setEditingPart(null);
@@ -187,17 +188,17 @@ export default function Inventory() {
     if (!partToDelete) return;
 
     try {
-      await requirePassword("Enter password to delete this part", async () => {
-        await partsApi.delete(partToDelete.id);
-        toast.success("Part deleted successfully");
-        setDeleteDialogOpen(false);
-        setPartToDelete(null);
-        fetchData();
-      });
+      await requirePassword("Enter password to delete this part");
+      await partsApi.delete(partToDelete.id);
+      toast.success("Part deleted successfully");
+      setDeleteDialogOpen(false);
+      setPartToDelete(null);
+      fetchData();
     } catch (error) {
       if (error.message !== "Cancelled") {
         toast.error("Failed to delete part");
       }
+      setDeleteDialogOpen(false);
     }
   };
 

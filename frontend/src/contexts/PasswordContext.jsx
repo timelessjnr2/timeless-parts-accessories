@@ -20,13 +20,15 @@ export function PasswordProvider({ children }) {
   const [isOpen, setIsOpen] = useState(false);
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [pendingAction, setPendingAction] = useState(null);
+  const [resolveRef, setResolveRef] = useState(null);
+  const [rejectRef, setRejectRef] = useState(null);
   const [actionDescription, setActionDescription] = useState("");
 
-  const requirePassword = useCallback((description, action) => {
+  const requirePassword = useCallback((description) => {
     return new Promise((resolve, reject) => {
       setActionDescription(description);
-      setPendingAction(() => ({ resolve, reject, action }));
+      setResolveRef(() => resolve);
+      setRejectRef(() => reject);
       setPassword("");
       setIsOpen(true);
     });
@@ -42,15 +44,11 @@ export function PasswordProvider({ children }) {
     try {
       await api.post("/verify-password", { password });
       setIsOpen(false);
-      
-      if (pendingAction) {
-        try {
-          const result = await pendingAction.action();
-          pendingAction.resolve(result);
-        } catch (error) {
-          pendingAction.reject(error);
-        }
+      if (resolveRef) {
+        resolveRef(true);
       }
+      setResolveRef(null);
+      setRejectRef(null);
     } catch (error) {
       toast.error("Invalid password");
     } finally {
@@ -60,10 +58,11 @@ export function PasswordProvider({ children }) {
 
   const handleCancel = () => {
     setIsOpen(false);
-    if (pendingAction) {
-      pendingAction.reject(new Error("Cancelled"));
+    if (rejectRef) {
+      rejectRef(new Error("Cancelled"));
     }
-    setPendingAction(null);
+    setResolveRef(null);
+    setRejectRef(null);
   };
 
   const handleKeyDown = (e) => {

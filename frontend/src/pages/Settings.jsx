@@ -63,37 +63,31 @@ export default function Settings() {
 
   const handleSaveCompany = async () => {
     try {
-      await requirePassword("Enter password to save company settings", async () => {
-        setSaving(true);
-        try {
-          await settingsApi.updateCompany(companyForm);
-          toast.success("Company settings saved");
-        } finally {
-          setSaving(false);
-        }
-      });
+      await requirePassword("Enter password to save company settings");
+      setSaving(true);
+      await settingsApi.updateCompany(companyForm);
+      toast.success("Company settings saved");
     } catch (error) {
       if (error.message !== "Cancelled") {
         toast.error("Failed to save company settings");
       }
+    } finally {
+      setSaving(false);
     }
   };
 
   const handleSavePolicies = async () => {
     try {
-      await requirePassword("Enter password to save policies", async () => {
-        setSaving(true);
-        try {
-          await settingsApi.updatePolicies(policiesForm);
-          toast.success("Policies saved");
-        } finally {
-          setSaving(false);
-        }
-      });
+      await requirePassword("Enter password to save policies");
+      setSaving(true);
+      await settingsApi.updatePolicies(policiesForm);
+      toast.success("Policies saved");
     } catch (error) {
       if (error.message !== "Cancelled") {
         toast.error("Failed to save policies");
       }
+    } finally {
+      setSaving(false);
     }
   };
 

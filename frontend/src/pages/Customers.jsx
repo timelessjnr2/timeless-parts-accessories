@@ -68,7 +68,7 @@ export default function Customers() {
     if (customer) {
       // Require password for editing
       try {
-        await requirePassword("Enter password to edit this customer", async () => {});
+        await requirePassword("Enter password to edit this customer");
         setEditingCustomer(customer);
         setFormData({
           name: customer.name,
@@ -78,7 +78,8 @@ export default function Customers() {
         });
         setDialogOpen(true);
       } catch (error) {
-        // User cancelled or wrong password
+        // User cancelled or wrong password - do nothing
+        return;
       }
     } else {
       setEditingCustomer(null);
@@ -116,17 +117,17 @@ export default function Customers() {
     if (!customerToDelete) return;
 
     try {
-      await requirePassword("Enter password to delete this customer", async () => {
-        await customersApi.delete(customerToDelete.id);
-        toast.success("Customer deleted successfully");
-        setDeleteDialogOpen(false);
-        setCustomerToDelete(null);
-        fetchCustomers();
-      });
+      await requirePassword("Enter password to delete this customer");
+      await customersApi.delete(customerToDelete.id);
+      toast.success("Customer deleted successfully");
+      setDeleteDialogOpen(false);
+      setCustomerToDelete(null);
+      fetchCustomers();
     } catch (error) {
       if (error.message !== "Cancelled") {
         toast.error("Failed to delete customer");
       }
+      setDeleteDialogOpen(false);
     }
   };
 
