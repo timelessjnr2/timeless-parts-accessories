@@ -1,4 +1,4 @@
-# App Version: 2.1.0 - Built: 20260308_015023 - Password Protection + Mobile Menu
+# App Version: 2.2.0 - 20260308_015858 - FORCE REBUILD
 from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv

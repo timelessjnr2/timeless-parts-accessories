@@ -1,9 +1,7 @@
-const CACHE_NAME = 'timeless-parts-v1';
+const CACHE_NAME = 'timeless-parts-v3';
 const urlsToCache = [
   '/',
   '/index.html',
-  '/static/js/bundle.js',
-  '/static/css/main.css',
   '/manifest.json'
 ];
 
@@ -19,49 +17,17 @@ self.addEventListener('install', (event) => {
         console.log('Cache install error:', err);
       })
   );
+  // Force the waiting service worker to become active
   self.skipWaiting();
 });
 
-// Fetch resources from cache or network
-self.addEventListener('fetch', (event) => {
-  // Skip non-GET requests
-  if (event.request.method !== 'GET') return;
-  
-  // Skip API calls - always fetch from network
-  if (event.request.url.includes('/api/')) {
-    return;
-  }
-
-  event.respondWith(
-    caches.match(event.request)
-      .then((response) => {
-        // Return cached version or fetch from network
-        if (response) {
-          return response;
-        }
-        return fetch(event.request).then((response) => {
-          // Don't cache non-successful responses
-          if (!response || response.status !== 200 || response.type !== 'basic') {
-            return response;
-          }
-          // Clone and cache the response
-          const responseToCache = response.clone();
-          caches.open(CACHE_NAME)
-            .then((cache) => {
-              cache.put(event.request, responseToCache);
-            });
-          return response;
-        });
-      })
-  );
-});
-
-// Clean up old caches
+// Activate and clean up old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames.map((cacheName) => {
+          // Delete ALL old caches
           if (cacheName !== CACHE_NAME) {
             console.log('Deleting old cache:', cacheName);
             return caches.delete(cacheName);
@@ -70,5 +36,45 @@ self.addEventListener('activate', (event) => {
       );
     })
   );
+  // Take control of all pages immediately
   self.clients.claim();
+});
+
+// Fetch - Network first, then cache
+self.addEventListener('fetch', (event) => {
+  // Skip non-GET requests
+  if (event.request.method !== 'GET') return;
+  
+  // Always fetch API calls from network
+  if (event.request.url.includes('/api/')) {
+    return;
+  }
+
+  // For navigation requests, always go to network first
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .catch(() => caches.match('/index.html'))
+    );
+    return;
+  }
+
+  // For other requests, try network first, fall back to cache
+  event.respondWith(
+    fetch(event.request)
+      .then((response) => {
+        // Clone and cache the response
+        if (response && response.status === 200) {
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME)
+            .then((cache) => {
+              cache.put(event.request, responseToCache);
+            });
+        }
+        return response;
+      })
+      .catch(() => {
+        return caches.match(event.request);
+      })
+  );
 });
