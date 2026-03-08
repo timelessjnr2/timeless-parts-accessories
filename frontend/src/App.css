@@ -16,6 +16,12 @@
     }
 }
 
+/* Sidebar styling */
+.sidebar {
+    background-color: #dc2626;
+    color: white;
+}
+
 /* Logo styling */
 .logo-container {
     display: flex;

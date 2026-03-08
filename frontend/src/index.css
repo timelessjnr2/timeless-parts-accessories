@@ -71,15 +71,17 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .sidebar-item {
-    @apply flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors;
+    @apply flex items-center gap-3 px-4 py-3 text-sm font-medium rounded-lg transition-colors text-white/90;
 }
 
 .sidebar-item:hover {
     background-color: hsl(0 72% 40%);
+    @apply text-white;
 }
 
 .sidebar-item.active {
     background-color: hsl(0 72% 35%);
+    @apply text-white;
 }
 
 /* Table styling */
