@@ -14,14 +14,14 @@ from datetime import datetime, timezone
 import base64
 import hashlib
 
-# Admin password from environment variable
+ROOT_DIR = Path(__file__).parent
+load_dotenv(ROOT_DIR / '.env')
+
+# Admin password from environment variable (MUST be after load_dotenv)
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'change_me_in_production')
 
 def verify_password(password: str) -> bool:
     return password == ADMIN_PASSWORD
-
-ROOT_DIR = Path(__file__).parent
-load_dotenv(ROOT_DIR / '.env')
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
