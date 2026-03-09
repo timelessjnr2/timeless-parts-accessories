@@ -10,6 +10,7 @@ import CreateInvoice from "@/pages/CreateInvoice";
 import InvoicePrint from "@/pages/InvoicePrint";
 import Reports from "@/pages/Reports";
 import Settings from "@/pages/Settings";
+import SalesJournal from "@/pages/SalesJournal";
 import "@/App.css";
 
 function App() {
@@ -25,6 +26,7 @@ function App() {
               <Route path="/customers" element={<Customers />} />
               <Route path="/invoices" element={<Invoices />} />
               <Route path="/invoices/create" element={<CreateInvoice />} />
+              <Route path="/sales-journal" element={<SalesJournal />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/settings" element={<Settings />} />
             </Route>

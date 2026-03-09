@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
-import { Plus, Search, Edit2, Trash2, Users, Phone, Mail, MapPin } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
+import { Plus, Search, Edit2, Trash2, Users, Phone, Mail, MapPin, FileText, Percent, ChevronDown, ChevronUp } from "lucide-react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -28,7 +29,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 import { customersApi } from "@/lib/api";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime, formatCurrency } from "@/lib/utils";
 import { usePassword } from "@/contexts/PasswordContext";
 
 export default function Customers() {
@@ -38,14 +39,18 @@ export default function Customers() {
   const [search, setSearch] = useState("");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [invoiceDialogOpen, setInvoiceDialogOpen] = useState(false);
   const [editingCustomer, setEditingCustomer] = useState(null);
   const [customerToDelete, setCustomerToDelete] = useState(null);
+  const [selectedCustomerInvoices, setSelectedCustomerInvoices] = useState(null);
+  const [expandedCustomer, setExpandedCustomer] = useState(null);
 
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
     email: "",
     address: "",
+    discount_percentage: 0,
   });
 
   useEffect(() => {
@@ -75,6 +80,7 @@ export default function Customers() {
           phone: customer.phone || "",
           email: customer.email || "",
           address: customer.address || "",
+          discount_percentage: customer.discount_percentage || 0,
         });
         setDialogOpen(true);
       } catch (error) {
@@ -88,6 +94,7 @@ export default function Customers() {
         phone: "",
         email: "",
         address: "",
+        discount_percentage: 0,
       });
       setDialogOpen(true);
     }
@@ -128,6 +135,30 @@ export default function Customers() {
         toast.error("Failed to delete customer");
       }
       setDeleteDialogOpen(false);
+    }
+  };
+
+  const handleViewInvoices = async (customer) => {
+    try {
+      const res = await customersApi.getInvoices(customer.id);
+      setSelectedCustomerInvoices(res.data);
+      setInvoiceDialogOpen(true);
+    } catch (error) {
+      console.error("Error fetching customer invoices:", error);
+      toast.error("Failed to load customer invoices");
+    }
+  };
+
+  const getStatusBadge = (status) => {
+    switch (status) {
+      case "paid":
+        return <Badge className="bg-green-500 text-white">Paid</Badge>;
+      case "pending":
+        return <Badge variant="secondary">Pending</Badge>;
+      case "cancelled":
+        return <Badge variant="destructive">Cancelled</Badge>;
+      default:
+        return <Badge variant="outline">{status}</Badge>;
     }
   };
 
@@ -200,6 +231,7 @@ export default function Customers() {
                   <TableHead>Phone</TableHead>
                   <TableHead>Email</TableHead>
                   <TableHead>Address</TableHead>
+                  <TableHead>Discount</TableHead>
                   <TableHead>Added</TableHead>
                   <TableHead className="text-right">Actions</TableHead>
                 </TableRow>
@@ -243,6 +275,16 @@ export default function Customers() {
                         <span className="text-muted-foreground">-</span>
                       )}
                     </TableCell>
+                    <TableCell>
+                      {customer.discount_percentage > 0 ? (
+                        <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
+                          <Percent className="h-3 w-3 mr-1" />
+                          {customer.discount_percentage}%
+                        </Badge>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
                     <TableCell className="text-muted-foreground">
                       {formatDate(customer.created_at)}
                     </TableCell>
@@ -254,6 +296,12 @@ export default function Customers() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => handleViewInvoices(customer)}
+                          >
+                            <FileText className="mr-2 h-4 w-4" />
+                            View Invoices
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             onClick={() => handleOpenDialog(customer)}
                           >
@@ -341,6 +389,25 @@ export default function Customers() {
               />
             </div>
 
+            <div className="space-y-2">
+              <Label htmlFor="discount">Discount Percentage (%)</Label>
+              <Input
+                id="discount"
+                type="number"
+                min="0"
+                max="100"
+                step="0.5"
+                value={formData.discount_percentage}
+                onChange={(e) =>
+                  setFormData({ ...formData, discount_percentage: parseFloat(e.target.value) || 0 })
+                }
+                data-testid="customer-discount-input"
+              />
+              <p className="text-xs text-muted-foreground">
+                This discount will be automatically applied to all purchases for this customer
+              </p>
+            </div>
+
             <DialogFooter>
               <Button
                 type="button"
@@ -382,6 +449,98 @@ export default function Customers() {
               Delete
             </Button>
           </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Customer Invoices Dialog */}
+      <Dialog open={invoiceDialogOpen} onOpenChange={setInvoiceDialogOpen}>
+        <DialogContent className="max-w-4xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-['Barlow_Condensed'] text-2xl uppercase">
+              {selectedCustomerInvoices?.customer?.name}'s Invoices
+            </DialogTitle>
+          </DialogHeader>
+          
+          {selectedCustomerInvoices && (
+            <div className="space-y-4">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground">Total Invoices</p>
+                    <p className="text-2xl font-bold">{selectedCustomerInvoices.summary.total_invoices}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground">Total Purchases</p>
+                    <p className="text-2xl font-bold">{formatCurrency(selectedCustomerInvoices.summary.total_purchases)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground">Total Paid</p>
+                    <p className="text-2xl font-bold text-green-600">{formatCurrency(selectedCustomerInvoices.summary.total_paid)}</p>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="p-4">
+                    <p className="text-xs text-muted-foreground">Outstanding Balance</p>
+                    <p className="text-2xl font-bold text-red-600">{formatCurrency(selectedCustomerInvoices.summary.total_balance)}</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Invoices Table */}
+              {selectedCustomerInvoices.invoices.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                  <p>No invoices found for this customer</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Invoice #</TableHead>
+                      <TableHead>Date</TableHead>
+                      <TableHead>Items</TableHead>
+                      <TableHead className="text-right">Total</TableHead>
+                      <TableHead className="text-right">Paid</TableHead>
+                      <TableHead className="text-right">Balance</TableHead>
+                      <TableHead>Status</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {selectedCustomerInvoices.invoices.map((invoice) => (
+                      <TableRow key={invoice.id}>
+                        <TableCell className="font-mono font-semibold">
+                          {invoice.invoice_number}
+                        </TableCell>
+                        <TableCell className="text-muted-foreground">
+                          {formatDateTime(invoice.created_at)}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {invoice.items?.length || 0} items
+                          </Badge>
+                        </TableCell>
+                        <TableCell className="text-right font-semibold">
+                          {formatCurrency(invoice.total)}
+                        </TableCell>
+                        <TableCell className="text-right text-green-600">
+                          {formatCurrency((invoice.amount_paid || 0) + (invoice.down_payment || 0))}
+                        </TableCell>
+                        <TableCell className="text-right text-red-600">
+                          {formatCurrency(invoice.balance_due || 0)}
+                        </TableCell>
+                        <TableCell>{getStatusBadge(invoice.status)}</TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </div>
+          )}
         </DialogContent>
       </Dialog>
     </div>

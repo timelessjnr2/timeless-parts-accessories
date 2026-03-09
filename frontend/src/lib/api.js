@@ -30,6 +30,7 @@ export const customersApi = {
   create: (data) => api.post("/customers", data),
   update: (id, data) => api.put(`/customers/${id}`, data),
   delete: (id) => api.delete(`/customers/${id}`),
+  getInvoices: (id) => api.get(`/customers/${id}/invoices`),
 };
 
 // Invoices API
@@ -38,6 +39,23 @@ export const invoicesApi = {
   getById: (id) => api.get(`/invoices/${id}`),
   create: (data) => api.post("/invoices", data),
   update: (id, data) => api.put(`/invoices/${id}`, data),
+  delete: (id, password) => api.delete(`/invoices/${id}?password=${encodeURIComponent(password)}`),
+  cancel: (id, password) => api.put(`/invoices/${id}/cancel?password=${encodeURIComponent(password)}`),
+  markPaid: (id, amount) => api.put(`/invoices/${id}/mark-paid${amount ? `?amount=${amount}` : ''}`),
+  addPayment: (id, amount) => api.put(`/invoices/${id}/add-payment?amount=${amount}`),
+};
+
+// Sales Journal API
+export const salesJournalApi = {
+  getJournal: (date) => api.get(`/sales-journal${date ? `?date=${date}` : ''}`),
+  getDates: (limit = 30) => api.get(`/sales-journal/dates?limit=${limit}`),
+  toggleCheckOff: (invoiceId) => api.put(`/sales-journal/check-off/${invoiceId}`),
+};
+
+// Auth API
+export const authApi = {
+  verifyPassword: (password) => api.post("/verify-password", { password }),
+  verifyInvoicePassword: (password) => api.post("/verify-invoice-password", { password }),
 };
 
 // Settings API

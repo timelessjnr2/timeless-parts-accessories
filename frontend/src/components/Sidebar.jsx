@@ -8,6 +8,7 @@ import {
   Settings,
   Plus,
   X,
+  BookOpen,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -19,6 +20,7 @@ const navItems = [
   { path: "/inventory", icon: Package, label: "Inventory" },
   { path: "/customers", icon: Users, label: "Customers" },
   { path: "/invoices", icon: FileText, label: "Invoices" },
+  { path: "/sales-journal", icon: BookOpen, label: "Sales Journal" },
   { path: "/reports", icon: BarChart3, label: "Reports" },
   { path: "/settings", icon: Settings, label: "Settings" },
 ];

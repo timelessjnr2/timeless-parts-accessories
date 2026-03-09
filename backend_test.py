@@ -7,7 +7,7 @@ from datetime import datetime
 import uuid
 
 class TimelessPartsAPITester:
-    def __init__(self, base_url="https://parts-manager-34.preview.emergentagent.com"):
+    def __init__(self, base_url="https://invoice-mgmt-12.preview.emergentagent.com"):
         self.base_url = base_url
         self.api_base = f"{base_url}/api"
         self.tests_run = 0

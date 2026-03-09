@@ -1,5 +1,5 @@
-# App Version: 2.2.0 - 20260308_015858 - FORCE REBUILD
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form
+# App Version: 3.0.0 - Advanced Invoice System
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Query
 from fastapi.responses import JSONResponse
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
@@ -10,7 +10,7 @@ from pathlib import Path
 from pydantic import BaseModel, Field, ConfigDict
 from typing import List, Optional
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import base64
 import hashlib
 
@@ -19,9 +19,13 @@ load_dotenv(ROOT_DIR / '.env')
 
 # Admin password from environment variable (MUST be after load_dotenv)
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'change_me_in_production')
+INVOICE_PASSWORD = os.environ.get('INVOICE_PASSWORD', 'change_me_in_production')
 
 def verify_password(password: str) -> bool:
     return password == ADMIN_PASSWORD
+
+def verify_invoice_password(password: str) -> bool:
+    return password == INVOICE_PASSWORD
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -80,6 +84,7 @@ class CustomerBase(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
+    discount_percentage: float = 0  # Customer-specific discount
 
 class CustomerCreate(CustomerBase):
     pass
@@ -94,6 +99,7 @@ class CustomerUpdate(BaseModel):
     phone: Optional[str] = None
     email: Optional[str] = None
     address: Optional[str] = None
+    discount_percentage: Optional[float] = None
 
 class InvoiceItem(BaseModel):
     part_id: str
@@ -112,12 +118,16 @@ class InvoiceBase(BaseModel):
     subtotal: float
     discount: float = 0
     discount_percentage: float = 0
-    tax_rate: float = 15.0
+    tax_rate: float = 0
     tax_amount: float
     total: float
     payment_method: Optional[str] = "Cash"
     notes: Optional[str] = None
     status: str = "pending"
+    down_payment: float = 0
+    amount_paid: float = 0
+    balance_due: float = 0
+    save_customer: bool = False  # Flag to auto-save new customer
 
 class InvoiceCreate(InvoiceBase):
     pass
@@ -128,11 +138,17 @@ class Invoice(InvoiceBase):
     invoice_number: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     user: str = "Admin"
+    checked_off: bool = False  # For Sales Journal check-off feature
+    checked_off_at: Optional[datetime] = None
 
 class InvoiceUpdate(BaseModel):
     status: Optional[str] = None
     payment_method: Optional[str] = None
     notes: Optional[str] = None
+    down_payment: Optional[float] = None
+    amount_paid: Optional[float] = None
+    balance_due: Optional[float] = None
+    checked_off: Optional[bool] = None
 
 class CompanySettings(BaseModel):
     company_name: str = "Timeless Parts and Accessories"
@@ -140,10 +156,10 @@ class CompanySettings(BaseModel):
     phone: str = "876-403-8436"
     email: str = "timelessautoimportslimited@gmail.com"
     logo_url: str = "https://customer-assets.emergentagent.com/job_c8ea836d-f376-4793-85ac-d42fefdf5d7d/artifacts/mxjzjbvw_WhatsApp%20Image%202026-03-05%20at%204.13.42%20PM.jpeg"
-    tax_rate: float = 15.0
+    tax_rate: float = 0
     tax_name: str = "GCT"
     currency: str = "JMD"
-    invoice_prefix: str = "TPA"
+    invoice_prefix: str = "TA"
 
 class PolicySettings(BaseModel):
     sales_return_policy: List[str] = [
@@ -197,8 +213,9 @@ async def get_next_invoice_number():
         await db.settings.insert_one(settings)
     
     counter = settings.get('invoice_counter', 1)
-    prefix = settings.get('company', {}).get('invoice_prefix', 'TPA')
-    invoice_number = f"{prefix}-{counter:05d}"
+    prefix = settings.get('company', {}).get('invoice_prefix', 'TA')
+    # Use shorter format: TA-01, TA-02, etc.
+    invoice_number = f"{prefix}-{counter:02d}"
     
     await db.settings.update_one(
         {"id": "settings"},
@@ -227,6 +244,13 @@ async def root():
 @api_router.post("/verify-password")
 async def verify_admin_password(data: PasswordVerify):
     if verify_password(data.password):
+        return {"verified": True}
+    raise HTTPException(status_code=401, detail="Invalid password")
+
+@api_router.post("/verify-invoice-password")
+async def verify_invoice_admin_password(data: PasswordVerify):
+    """Verify password for invoice operations (delete/cancel)"""
+    if verify_invoice_password(data.password):
         return {"verified": True}
     raise HTTPException(status_code=401, detail="Invalid password")
 
@@ -435,6 +459,9 @@ async def get_customers(search: Optional[str] = None, skip: int = 0, limit: int 
     for customer in customers:
         if isinstance(customer.get('created_at'), str):
             customer['created_at'] = datetime.fromisoformat(customer['created_at'])
+        # Ensure discount_percentage has default value
+        if 'discount_percentage' not in customer:
+            customer['discount_percentage'] = 0
     
     return customers
 
@@ -447,7 +474,50 @@ async def get_customer(customer_id: str):
     if isinstance(customer.get('created_at'), str):
         customer['created_at'] = datetime.fromisoformat(customer['created_at'])
     
+    # Ensure discount_percentage has default value
+    if 'discount_percentage' not in customer:
+        customer['discount_percentage'] = 0
+    
     return customer
+
+@api_router.get("/customers/{customer_id}/invoices")
+async def get_customer_invoices(customer_id: str, skip: int = 0, limit: int = 50):
+    """Get all invoices for a specific customer"""
+    # Verify customer exists
+    customer = await db.customers.find_one({"id": customer_id}, {"_id": 0})
+    if not customer:
+        raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Get invoices by customer_id OR by customer name (for walk-in customers)
+    customer_name = customer.get('name', '')
+    query = {
+        "$or": [
+            {"customer_id": customer_id},
+            {"customer_name": {"$regex": f"^{customer_name}$", "$options": "i"}}
+        ]
+    }
+    
+    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
+    
+    for invoice in invoices:
+        if isinstance(invoice.get('created_at'), str):
+            invoice['created_at'] = datetime.fromisoformat(invoice['created_at'])
+    
+    # Calculate totals
+    total_purchases = sum(inv.get('total', 0) for inv in invoices)
+    total_paid = sum(inv.get('amount_paid', inv.get('total', 0)) if inv.get('status') == 'paid' else inv.get('amount_paid', 0) for inv in invoices)
+    total_balance = sum(inv.get('balance_due', 0) for inv in invoices)
+    
+    return {
+        "customer": customer,
+        "invoices": invoices,
+        "summary": {
+            "total_invoices": len(invoices),
+            "total_purchases": total_purchases,
+            "total_paid": total_paid,
+            "total_balance": total_balance
+        }
+    }
 
 @api_router.post("/customers", response_model=Customer)
 async def create_customer(customer: CustomerCreate):
@@ -535,10 +605,47 @@ async def get_invoice(invoice_id: str):
 async def create_invoice(invoice: InvoiceCreate):
     invoice_number = await get_next_invoice_number()
     
-    invoice_obj = Invoice(**invoice.model_dump(), invoice_number=invoice_number)
+    # Calculate balance due based on down payment
+    balance_due = invoice.total - (invoice.down_payment or 0) - (invoice.amount_paid or 0)
+    
+    # Auto-save customer if flag is set and no customer_id
+    customer_id = invoice.customer_id
+    if invoice.save_customer and not customer_id and invoice.customer_name:
+        # Check if customer with this name already exists
+        existing_customer = await db.customers.find_one(
+            {"name": {"$regex": f"^{invoice.customer_name}$", "$options": "i"}},
+            {"_id": 0}
+        )
+        if existing_customer:
+            customer_id = existing_customer.get('id')
+        else:
+            # Create new customer
+            new_customer = Customer(
+                name=invoice.customer_name,
+                phone=invoice.customer_phone,
+                address=invoice.customer_address,
+                discount_percentage=0
+            )
+            customer_doc = new_customer.model_dump()
+            customer_doc['created_at'] = customer_doc['created_at'].isoformat()
+            await db.customers.insert_one(customer_doc)
+            customer_id = new_customer.id
+    
+    # Exclude fields we're setting explicitly to avoid duplicate kwargs
+    exclude_fields = ('save_customer', 'customer_id', 'balance_due', 'amount_paid')
+    invoice_data = {k: v for k, v in invoice.model_dump().items() if k not in exclude_fields}
+    invoice_obj = Invoice(
+        **invoice_data,
+        invoice_number=invoice_number,
+        customer_id=customer_id,
+        balance_due=balance_due,
+        amount_paid=invoice.down_payment or 0
+    )
     doc = invoice_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     doc['items'] = [dict(item) for item in doc['items']]
+    if doc.get('checked_off_at'):
+        doc['checked_off_at'] = doc['checked_off_at'].isoformat()
     
     # Update stock for each item
     for item in invoice.items:
@@ -558,6 +665,24 @@ async def update_invoice(invoice_id: str, invoice_update: InvoiceUpdate):
     
     update_data = {k: v for k, v in invoice_update.model_dump().items() if v is not None}
     
+    # Handle check_off timestamp
+    if 'checked_off' in update_data:
+        if update_data['checked_off']:
+            update_data['checked_off_at'] = datetime.now(timezone.utc).isoformat()
+        else:
+            update_data['checked_off_at'] = None
+    
+    # Recalculate balance_due if payment amounts change
+    if 'amount_paid' in update_data or 'down_payment' in update_data:
+        total = existing.get('total', 0)
+        down_payment = update_data.get('down_payment', existing.get('down_payment', 0))
+        amount_paid = update_data.get('amount_paid', existing.get('amount_paid', 0))
+        update_data['balance_due'] = total - down_payment - amount_paid
+        
+        # Auto-mark as paid if balance is 0 or less
+        if update_data['balance_due'] <= 0:
+            update_data['status'] = 'paid'
+    
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
     
     updated = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
@@ -565,6 +690,90 @@ async def update_invoice(invoice_id: str, invoice_update: InvoiceUpdate):
         updated['created_at'] = datetime.fromisoformat(updated['created_at'])
     
     return updated
+
+@api_router.put("/invoices/{invoice_id}/mark-paid")
+async def mark_invoice_paid(invoice_id: str, amount: Optional[float] = None):
+    """Mark an invoice as paid"""
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    total = existing.get('total', 0)
+    update_data = {
+        'status': 'paid',
+        'amount_paid': amount if amount else total,
+        'balance_due': 0
+    }
+    
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    return {"message": "Invoice marked as paid"}
+
+@api_router.put("/invoices/{invoice_id}/add-payment")
+async def add_invoice_payment(invoice_id: str, amount: float):
+    """Add a payment to an invoice"""
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    current_paid = existing.get('amount_paid', 0) + existing.get('down_payment', 0)
+    new_paid = current_paid + amount
+    total = existing.get('total', 0)
+    new_balance = total - new_paid
+    
+    update_data = {
+        'amount_paid': new_paid,
+        'balance_due': max(0, new_balance)
+    }
+    
+    # Auto-mark as paid if fully paid
+    if new_balance <= 0:
+        update_data['status'] = 'paid'
+    
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    return {"message": "Payment added", "new_balance": max(0, new_balance)}
+
+@api_router.delete("/invoices/{invoice_id}")
+async def delete_invoice(invoice_id: str, password: str = Query(...)):
+    """Delete/cancel an invoice (requires invoice password)"""
+    if not verify_invoice_password(password):
+        raise HTTPException(status_code=401, detail="Invalid invoice password")
+    
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Restore stock for each item
+    for item in existing.get('items', []):
+        await db.parts.update_one(
+            {"id": item.get('part_id')},
+            {"$inc": {"quantity": item.get('quantity', 0)}}
+        )
+    
+    await db.invoices.delete_one({"id": invoice_id})
+    return {"message": "Invoice deleted successfully"}
+
+@api_router.put("/invoices/{invoice_id}/cancel")
+async def cancel_invoice(invoice_id: str, password: str = Query(...)):
+    """Cancel an invoice (requires invoice password) - keeps record but marks as cancelled"""
+    if not verify_invoice_password(password):
+        raise HTTPException(status_code=401, detail="Invalid invoice password")
+    
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    # Restore stock for each item
+    for item in existing.get('items', []):
+        await db.parts.update_one(
+            {"id": item.get('part_id')},
+            {"$inc": {"quantity": item.get('quantity', 0)}}
+        )
+    
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {"status": "cancelled"}}
+    )
+    return {"message": "Invoice cancelled successfully"}
 
 @api_router.delete("/invoices/clear-all")
 async def clear_all_invoices():
@@ -575,6 +784,79 @@ async def clear_all_invoices():
         {"$set": {"invoice_counter": 1}}
     )
     return {"message": "All invoices cleared and counter reset"}
+
+# ---- Sales Journal Routes ----
+
+@api_router.get("/sales-journal")
+async def get_sales_journal(date: Optional[str] = None):
+    """Get daily sales journal - all transactions for a specific day"""
+    if not date:
+        date = datetime.now(timezone.utc).date().isoformat()
+    
+    # Get all invoices for the specified date
+    query = {"created_at": {"$regex": f"^{date}"}}
+    invoices = await db.invoices.find(query, {"_id": 0}).sort("created_at", 1).to_list(1000)
+    
+    for invoice in invoices:
+        if isinstance(invoice.get('created_at'), str):
+            invoice['created_at'] = datetime.fromisoformat(invoice['created_at'])
+    
+    # Calculate summary
+    total_sales = sum(inv.get('total', 0) for inv in invoices if inv.get('status') != 'cancelled')
+    total_paid = sum(inv.get('amount_paid', 0) + inv.get('down_payment', 0) for inv in invoices if inv.get('status') != 'cancelled')
+    total_pending = sum(inv.get('balance_due', 0) for inv in invoices if inv.get('status') == 'pending')
+    total_items_sold = sum(sum(item.get('quantity', 0) for item in inv.get('items', [])) for inv in invoices if inv.get('status') != 'cancelled')
+    checked_off_count = sum(1 for inv in invoices if inv.get('checked_off'))
+    
+    return {
+        "date": date,
+        "invoices": invoices,
+        "summary": {
+            "total_invoices": len(invoices),
+            "checked_off_count": checked_off_count,
+            "unchecked_count": len(invoices) - checked_off_count,
+            "total_sales": total_sales,
+            "total_paid": total_paid,
+            "total_pending": total_pending,
+            "total_items_sold": total_items_sold
+        }
+    }
+
+@api_router.put("/sales-journal/check-off/{invoice_id}")
+async def toggle_invoice_check_off(invoice_id: str):
+    """Toggle check-off status for an invoice in the sales journal"""
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    current_status = existing.get('checked_off', False)
+    new_status = not current_status
+    
+    update_data = {
+        'checked_off': new_status,
+        'checked_off_at': datetime.now(timezone.utc).isoformat() if new_status else None
+    }
+    
+    await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    return {"message": f"Invoice {'checked off' if new_status else 'unchecked'}", "checked_off": new_status}
+
+@api_router.get("/sales-journal/dates")
+async def get_sales_journal_dates(limit: int = 30):
+    """Get list of dates that have invoices"""
+    pipeline = [
+        {
+            "$group": {
+                "_id": {"$substr": ["$created_at", 0, 10]},
+                "count": {"$sum": 1},
+                "total": {"$sum": "$total"}
+            }
+        },
+        {"$sort": {"_id": -1}},
+        {"$limit": limit}
+    ]
+    
+    dates = await db.invoices.aggregate(pipeline).to_list(limit)
+    return [{"date": d["_id"], "invoice_count": d["count"], "total_sales": d["total"]} for d in dates]
 
 # ---- Settings Routes ----
 

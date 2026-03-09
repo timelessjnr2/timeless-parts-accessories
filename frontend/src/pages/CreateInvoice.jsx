@@ -8,8 +8,9 @@ import {
   User,
   Package,
   Calculator,
-  Star,
   Zap,
+  UserPlus,
+  Percent,
 } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -17,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   Select,
   SelectContent,
@@ -64,7 +66,12 @@ export default function CreateInvoice() {
     discount_percentage: 0,
     payment_method: "Cash",
     notes: "",
+    down_payment: 0,
+    save_customer: false,
+    status: "pending",
   });
+
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
 
   useEffect(() => {
     fetchData();
@@ -91,14 +98,29 @@ export default function CreateInvoice() {
   };
 
   const selectCustomer = (customer) => {
+    setSelectedCustomer(customer);
     setInvoiceData({
       ...invoiceData,
       customer_id: customer.id,
       customer_name: customer.name,
       customer_phone: customer.phone || "",
       customer_address: customer.address || "",
+      discount_percentage: customer.discount_percentage || 0,
+      save_customer: false,
     });
     setCustomerSearch("");
+  };
+
+  const clearCustomer = () => {
+    setSelectedCustomer(null);
+    setInvoiceData({
+      ...invoiceData,
+      customer_id: "",
+      customer_name: "",
+      customer_phone: "",
+      customer_address: "",
+      discount_percentage: 0,
+    });
   };
 
   const addPart = (part) => {
@@ -175,7 +197,7 @@ export default function CreateInvoice() {
   const calculateTax = () => {
     const subtotal = calculateSubtotal();
     const discount = calculateDiscount();
-    const taxRate = settings?.company?.tax_rate || 15;
+    const taxRate = settings?.company?.tax_rate ?? 0;
     return ((subtotal - discount) * taxRate) / 100;
   };
 
@@ -184,6 +206,11 @@ export default function CreateInvoice() {
     const discount = calculateDiscount();
     const tax = calculateTax();
     return subtotal - discount + tax;
+  };
+
+  const calculateBalanceDue = () => {
+    const total = calculateTotal();
+    return total - (invoiceData.down_payment || 0);
   };
 
   const handleSubmit = async () => {
@@ -201,6 +228,7 @@ export default function CreateInvoice() {
     const discount = calculateDiscount();
     const taxAmount = calculateTax();
     const total = calculateTotal();
+    const balanceDue = calculateBalanceDue();
 
     const payload = {
       customer_id: invoiceData.customer_id || null,
@@ -218,12 +246,16 @@ export default function CreateInvoice() {
       subtotal,
       discount,
       discount_percentage: invoiceData.discount_percentage,
-      tax_rate: settings?.company?.tax_rate || 15,
+      tax_rate: settings?.company?.tax_rate ?? 0,
       tax_amount: taxAmount,
       total,
       payment_method: invoiceData.payment_method,
       notes: invoiceData.notes || null,
-      status: "paid",
+      status: invoiceData.status,
+      down_payment: invoiceData.down_payment || 0,
+      amount_paid: invoiceData.down_payment || 0,
+      balance_due: balanceDue,
+      save_customer: invoiceData.save_customer,
     };
 
     try {
@@ -300,7 +332,14 @@ export default function CreateInvoice() {
                         onClick={() => selectCustomer(customer)}
                         data-testid={`select-customer-${customer.id}`}
                       >
-                        <span className="font-medium">{customer.name}</span>
+                        <div>
+                          <span className="font-medium">{customer.name}</span>
+                          {customer.discount_percentage > 0 && (
+                            <Badge variant="outline" className="ml-2 bg-green-50 text-green-700 text-xs">
+                              {customer.discount_percentage}% off
+                            </Badge>
+                          )}
+                        </div>
                         <span className="text-sm text-muted-foreground">
                           {customer.phone}
                         </span>
@@ -309,6 +348,23 @@ export default function CreateInvoice() {
                   </div>
                 )}
               </div>
+
+              {selectedCustomer && (
+                <div className="bg-green-50 border border-green-200 rounded-lg p-3 flex justify-between items-center">
+                  <div>
+                    <p className="font-medium text-green-800">{selectedCustomer.name}</p>
+                    {selectedCustomer.discount_percentage > 0 && (
+                      <p className="text-sm text-green-600">
+                        <Percent className="h-3 w-3 inline mr-1" />
+                        {selectedCustomer.discount_percentage}% customer discount applied
+                      </p>
+                    )}
+                  </div>
+                  <Button variant="ghost" size="sm" onClick={clearCustomer}>
+                    Change
+                  </Button>
+                </div>
+              )}
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -353,6 +409,24 @@ export default function CreateInvoice() {
                   data-testid="invoice-customer-address"
                 />
               </div>
+
+              {/* Save Customer Checkbox - only show if it's a new customer */}
+              {!invoiceData.customer_id && invoiceData.customer_name && (
+                <div className="flex items-center space-x-2 bg-blue-50 border border-blue-200 rounded-lg p-3">
+                  <Checkbox
+                    id="save-customer"
+                    checked={invoiceData.save_customer}
+                    onCheckedChange={(checked) =>
+                      setInvoiceData({ ...invoiceData, save_customer: checked })
+                    }
+                    data-testid="save-customer-checkbox"
+                  />
+                  <Label htmlFor="save-customer" className="text-sm text-blue-800 cursor-pointer">
+                    <UserPlus className="h-4 w-4 inline mr-1" />
+                    Save this customer to database
+                  </Label>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -512,6 +586,24 @@ export default function CreateInvoice() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
+                <Label>Invoice Status</Label>
+                <Select
+                  value={invoiceData.status}
+                  onValueChange={(value) =>
+                    setInvoiceData({ ...invoiceData, status: value })
+                  }
+                >
+                  <SelectTrigger data-testid="invoice-status">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
                 <Label>Payment Method</Label>
                 <Select
                   value={invoiceData.payment_method}
@@ -532,7 +624,14 @@ export default function CreateInvoice() {
               </div>
 
               <div className="space-y-2">
-                <Label>Discount (%)</Label>
+                <Label>
+                  Discount (%)
+                  {selectedCustomer?.discount_percentage > 0 && (
+                    <span className="text-green-600 ml-2">
+                      (Customer: {selectedCustomer.discount_percentage}%)
+                    </span>
+                  )}
+                </Label>
                 <Input
                   type="number"
                   min="0"
@@ -567,6 +666,23 @@ export default function CreateInvoice() {
               </div>
 
               <div className="space-y-2">
+                <Label>Down Payment (JMD)</Label>
+                <Input
+                  type="number"
+                  min="0"
+                  max={calculateTotal()}
+                  value={invoiceData.down_payment}
+                  onChange={(e) =>
+                    setInvoiceData({
+                      ...invoiceData,
+                      down_payment: parseFloat(e.target.value) || 0,
+                    })
+                  }
+                  data-testid="down-payment"
+                />
+              </div>
+
+              <div className="space-y-2">
                 <Label>Notes</Label>
                 <Textarea
                   value={invoiceData.notes}
@@ -586,14 +702,17 @@ export default function CreateInvoice() {
                 </div>
                 {calculateDiscount() > 0 && (
                   <div className="flex justify-between text-sm text-destructive">
-                    <span>Discount</span>
+                    <span>
+                      Discount
+                      {invoiceData.discount_percentage > 0 && ` (${invoiceData.discount_percentage}%)`}
+                    </span>
                     <span>-{formatCurrency(calculateDiscount())}</span>
                   </div>
                 )}
                 <div className="flex justify-between text-sm">
                   <span>
                     {settings?.company?.tax_name || "GCT"} (
-                    {settings?.company?.tax_rate || 15}%)
+                    {settings?.company?.tax_rate ?? 0}%)
                   </span>
                   <span>{formatCurrency(calculateTax())}</span>
                 </div>
@@ -601,6 +720,18 @@ export default function CreateInvoice() {
                   <span>Total</span>
                   <span>{formatCurrency(calculateTotal())}</span>
                 </div>
+                {invoiceData.down_payment > 0 && (
+                  <>
+                    <div className="flex justify-between text-sm text-green-600">
+                      <span>Down Payment</span>
+                      <span>-{formatCurrency(invoiceData.down_payment)}</span>
+                    </div>
+                    <div className="flex justify-between text-lg font-bold text-red-600">
+                      <span>Balance Due</span>
+                      <span>{formatCurrency(calculateBalanceDue())}</span>
+                    </div>
+                  </>
+                )}
               </div>
 
               <Button

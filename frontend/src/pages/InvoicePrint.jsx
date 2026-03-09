@@ -53,6 +53,10 @@ export default function InvoicePrint() {
   const company = settings?.company || {};
   const policies = settings?.policies || {};
 
+  // Calculate payment info
+  const totalPaid = (invoice.amount_paid || 0) + (invoice.down_payment || 0);
+  const balanceDue = invoice.balance_due || (invoice.total - totalPaid);
+
   return (
     <div className="min-h-screen bg-gray-100 py-8 print:bg-white print:py-0">
       {/* Print Button */}
@@ -129,6 +133,20 @@ export default function InvoicePrint() {
                     <td className="font-semibold text-slate-600 py-1">User</td>
                     <td>{invoice.user || "Admin"}</td>
                   </tr>
+                  <tr>
+                    <td className="font-semibold text-slate-600 py-1">Status</td>
+                    <td>
+                      <span className={`inline-block px-2 py-0.5 rounded text-xs font-semibold ${
+                        invoice.status === 'paid' 
+                          ? 'bg-green-100 text-green-800' 
+                          : invoice.status === 'cancelled'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                      }`}>
+                        {invoice.status?.toUpperCase()}
+                      </span>
+                    </td>
+                  </tr>
                 </tbody>
               </table>
             </div>
@@ -193,6 +211,12 @@ export default function InvoicePrint() {
               {invoice.status === "paid" && (
                 <div className="paid-stamp">PAID</div>
               )}
+              {invoice.status === "cancelled" && (
+                <div className="paid-stamp" style={{ backgroundColor: '#dc2626' }}>CANCELLED</div>
+              )}
+              {invoice.status === "pending" && balanceDue > 0 && (
+                <div className="paid-stamp" style={{ backgroundColor: '#f59e0b' }}>PENDING</div>
+              )}
             </div>
 
             {/* Totals */}
@@ -225,7 +249,7 @@ export default function InvoicePrint() {
                   </tr>
                   <tr>
                     <td className="text-right text-slate-600">
-                      {company.tax_name || "GCT"} ({invoice.tax_rate || 15}%)
+                      {company.tax_name || "GCT"} ({invoice.tax_rate || 0}%)
                     </td>
                     <td className="text-right">
                       {formatCurrency(invoice.tax_amount)}
@@ -237,6 +261,33 @@ export default function InvoicePrint() {
                       {formatCurrency(invoice.total)}
                     </td>
                   </tr>
+                  {/* Down Payment / Payments */}
+                  {(invoice.down_payment > 0 || totalPaid > 0) && (
+                    <>
+                      {invoice.down_payment > 0 && (
+                        <tr>
+                          <td className="text-right text-slate-600">Down Payment</td>
+                          <td className="text-right text-green-600">
+                            ({formatCurrency(invoice.down_payment)})
+                          </td>
+                        </tr>
+                      )}
+                      {invoice.amount_paid > 0 && invoice.amount_paid !== invoice.down_payment && (
+                        <tr>
+                          <td className="text-right text-slate-600">Amount Paid</td>
+                          <td className="text-right text-green-600">
+                            ({formatCurrency(invoice.amount_paid)})
+                          </td>
+                        </tr>
+                      )}
+                      <tr className="total-row">
+                        <td className="text-right font-bold text-red-600">BALANCE DUE</td>
+                        <td className="text-right font-bold text-lg text-red-600">
+                          {formatCurrency(balanceDue > 0 ? balanceDue : 0)}
+                        </td>
+                      </tr>
+                    </>
+                  )}
                 </tbody>
               </table>
             </div>
