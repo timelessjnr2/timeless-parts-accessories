@@ -1,10 +1,11 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Plus, Search, FileText, Printer, Eye, Trash2, XCircle, CheckCircle, DollarSign } from "lucide-react";
+import { Plus, Search, FileText, Printer, Eye, Trash2, XCircle, CheckCircle, DollarSign, RotateCcw, RefreshCcw } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Table,
   TableBody,
@@ -47,10 +48,12 @@ export default function Invoices() {
   // Dialog states
   const [passwordDialogOpen, setPasswordDialogOpen] = useState(false);
   const [paymentDialogOpen, setPaymentDialogOpen] = useState(false);
+  const [refundDialogOpen, setRefundDialogOpen] = useState(false);
   const [password, setPassword] = useState("");
-  const [actionType, setActionType] = useState(null); // 'delete' or 'cancel'
+  const [actionType, setActionType] = useState(null); // 'delete', 'cancel', 'uncancel', 'refund'
   const [selectedInvoice, setSelectedInvoice] = useState(null);
   const [paymentAmount, setPaymentAmount] = useState(0);
+  const [refundReason, setRefundReason] = useState("");
 
   useEffect(() => {
     fetchInvoices();
@@ -77,6 +80,8 @@ export default function Invoices() {
         return <Badge variant="secondary" className="bg-yellow-100 text-yellow-800">Pending</Badge>;
       case "cancelled":
         return <Badge variant="destructive">Cancelled</Badge>;
+      case "refunded":
+        return <Badge className="bg-purple-500 text-white">Refunded</Badge>;
       case "overdue":
         return <Badge className="bg-red-500 text-white">Overdue</Badge>;
       default:
@@ -84,14 +89,19 @@ export default function Invoices() {
     }
   };
 
-  const handleDeleteOrCancel = (invoice, type) => {
+  const handleInvoiceAction = (invoice, type) => {
     setSelectedInvoice(invoice);
     setActionType(type);
     setPassword("");
-    setPasswordDialogOpen(true);
+    setRefundReason("");
+    if (type === 'refund') {
+      setRefundDialogOpen(true);
+    } else {
+      setPasswordDialogOpen(true);
+    }
   };
 
-  const confirmDeleteOrCancel = async () => {
+  const confirmInvoiceAction = async () => {
     try {
       // Verify invoice password
       await authApi.verifyInvoicePassword(password);
@@ -99,14 +109,35 @@ export default function Invoices() {
       if (actionType === 'delete') {
         await invoicesApi.delete(selectedInvoice.id, password);
         toast.success("Invoice deleted successfully");
-      } else {
+      } else if (actionType === 'cancel') {
         await invoicesApi.cancel(selectedInvoice.id, password);
         toast.success("Invoice cancelled successfully");
+      } else if (actionType === 'uncancel') {
+        await invoicesApi.uncancel(selectedInvoice.id, password);
+        toast.success("Invoice restored successfully");
       }
       
       setPasswordDialogOpen(false);
       setSelectedInvoice(null);
       setPassword("");
+      fetchInvoices();
+    } catch (error) {
+      toast.error("Invalid password");
+    }
+  };
+
+  const confirmRefund = async () => {
+    try {
+      // Verify invoice password
+      await authApi.verifyInvoicePassword(password);
+      
+      await invoicesApi.refund(selectedInvoice.id, password, refundReason);
+      toast.success("Invoice refunded successfully");
+      
+      setRefundDialogOpen(false);
+      setSelectedInvoice(null);
+      setPassword("");
+      setRefundReason("");
       fetchInvoices();
     } catch (error) {
       toast.error("Invalid password");
@@ -280,7 +311,7 @@ export default function Invoices() {
                             </Link>
                           </DropdownMenuItem>
                           
-                          {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
+                          {invoice.status !== 'cancelled' && invoice.status !== 'refunded' && invoice.status !== 'paid' && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem onClick={() => handleMarkAsPaid(invoice)}>
@@ -294,25 +325,56 @@ export default function Invoices() {
                             </>
                           )}
                           
-                          {invoice.status !== 'cancelled' && (
+                          {/* Refund option for paid invoices */}
+                          {invoice.status === 'paid' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-purple-600"
+                                onClick={() => handleInvoiceAction(invoice, 'refund')}
+                              >
+                                <RotateCcw className="mr-2 h-4 w-4" />
+                                Refund Invoice
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          
+                          {/* Uncancel option for cancelled invoices */}
+                          {invoice.status === 'cancelled' && (
+                            <>
+                              <DropdownMenuSeparator />
+                              <DropdownMenuItem
+                                className="text-teal-600"
+                                onClick={() => handleInvoiceAction(invoice, 'uncancel')}
+                              >
+                                <RefreshCcw className="mr-2 h-4 w-4" />
+                                Restore Invoice
+                              </DropdownMenuItem>
+                            </>
+                          )}
+                          
+                          {/* Cancel and Delete options */}
+                          {invoice.status !== 'cancelled' && invoice.status !== 'refunded' && (
                             <>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-orange-600"
-                                onClick={() => handleDeleteOrCancel(invoice, 'cancel')}
+                                onClick={() => handleInvoiceAction(invoice, 'cancel')}
                               >
                                 <XCircle className="mr-2 h-4 w-4" />
                                 Cancel Invoice
                               </DropdownMenuItem>
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() => handleDeleteOrCancel(invoice, 'delete')}
-                              >
-                                <Trash2 className="mr-2 h-4 w-4" />
-                                Delete Invoice
-                              </DropdownMenuItem>
                             </>
                           )}
+                          
+                          {/* Delete option - always available */}
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => handleInvoiceAction(invoice, 'delete')}
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Invoice
+                          </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
                     </TableCell>
@@ -324,20 +386,21 @@ export default function Invoices() {
         </CardContent>
       </Card>
 
-      {/* Password Dialog for Delete/Cancel */}
+      {/* Password Dialog for Delete/Cancel/Uncancel */}
       <Dialog open={passwordDialogOpen} onOpenChange={setPasswordDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="text-destructive">
-              {actionType === 'delete' ? 'Delete Invoice' : 'Cancel Invoice'}
+            <DialogTitle className={actionType === 'uncancel' ? 'text-teal-600' : 'text-destructive'}>
+              {actionType === 'delete' && 'Delete Invoice'}
+              {actionType === 'cancel' && 'Cancel Invoice'}
+              {actionType === 'uncancel' && 'Restore Invoice'}
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
             <p>
-              {actionType === 'delete' 
-                ? `Are you sure you want to permanently delete invoice ${selectedInvoice?.invoice_number}? This will restore the stock for all items.`
-                : `Are you sure you want to cancel invoice ${selectedInvoice?.invoice_number}? The invoice will be marked as cancelled and stock will be restored.`
-              }
+              {actionType === 'delete' && `Are you sure you want to permanently delete invoice ${selectedInvoice?.invoice_number}? This will restore the stock for all items.`}
+              {actionType === 'cancel' && `Are you sure you want to cancel invoice ${selectedInvoice?.invoice_number}? The invoice will be marked as cancelled and stock will be restored.`}
+              {actionType === 'uncancel' && `Are you sure you want to restore invoice ${selectedInvoice?.invoice_number}? The invoice will be set back to pending and stock will be deducted again.`}
             </p>
             <div className="space-y-2">
               <Label>Enter Invoice Password</Label>
@@ -355,12 +418,59 @@ export default function Invoices() {
               Cancel
             </Button>
             <Button
-              variant="destructive"
-              onClick={confirmDeleteOrCancel}
+              variant={actionType === 'uncancel' ? 'default' : 'destructive'}
+              onClick={confirmInvoiceAction}
               disabled={!password}
               data-testid="confirm-invoice-action-btn"
             >
-              {actionType === 'delete' ? 'Delete' : 'Cancel Invoice'}
+              {actionType === 'delete' && 'Delete'}
+              {actionType === 'cancel' && 'Cancel Invoice'}
+              {actionType === 'uncancel' && 'Restore Invoice'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Refund Dialog */}
+      <Dialog open={refundDialogOpen} onOpenChange={setRefundDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-purple-600">Refund Invoice</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+              Are you sure you want to refund invoice {selectedInvoice?.invoice_number}? 
+              The stock will be restored for all items.
+            </p>
+            <div className="space-y-2">
+              <Label>Reason for Refund (optional)</Label>
+              <Textarea
+                value={refundReason}
+                onChange={(e) => setRefundReason(e.target.value)}
+                placeholder="Enter reason for refund..."
+                rows={2}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Enter Invoice Password</Label>
+              <Input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter password..."
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRefundDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              className="bg-purple-600 hover:bg-purple-700"
+              onClick={confirmRefund}
+              disabled={!password}
+            >
+              Refund Invoice
             </Button>
           </DialogFooter>
         </DialogContent>

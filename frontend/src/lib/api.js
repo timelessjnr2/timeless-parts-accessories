@@ -10,6 +10,44 @@ const api = axios.create({
   },
 });
 
+// Add auth token to requests if available
+api.interceptors.request.use((config) => {
+  const token = localStorage.getItem('auth_token');
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
+// Handle 401 errors
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401 && window.location.pathname !== '/login') {
+      // Token expired or invalid - redirect to login
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('auth_user');
+      // Don't redirect for password verification endpoints
+      if (!error.config?.url?.includes('verify-password')) {
+        window.location.href = '/login';
+      }
+    }
+    return Promise.reject(error);
+  }
+);
+
+// User Auth API
+export const userAuthApi = {
+  login: (username, password) => api.post("/auth/login", { username, password }),
+  logout: () => api.post("/auth/logout"),
+  register: (data) => api.post("/auth/register", data),
+  getCurrentUser: () => api.get("/auth/me"),
+  getAllUsers: () => api.get("/auth/users"),
+  getActivityLogs: (limit = 50, userId = null) => 
+    api.get(`/auth/activity?limit=${limit}${userId ? `&user_id=${userId}` : ''}`),
+  toggleUserActive: (userId) => api.put(`/auth/users/${userId}/toggle-active`),
+};
+
 // Parts API
 export const partsApi = {
   getAll: (params) => api.get("/parts", { params }),
@@ -41,6 +79,8 @@ export const invoicesApi = {
   update: (id, data) => api.put(`/invoices/${id}`, data),
   delete: (id, password) => api.delete(`/invoices/${id}?password=${encodeURIComponent(password)}`),
   cancel: (id, password) => api.put(`/invoices/${id}/cancel?password=${encodeURIComponent(password)}`),
+  uncancel: (id, password) => api.put(`/invoices/${id}/uncancel?password=${encodeURIComponent(password)}`),
+  refund: (id, password, reason = '') => api.put(`/invoices/${id}/refund?password=${encodeURIComponent(password)}${reason ? `&reason=${encodeURIComponent(reason)}` : ''}`),
   markPaid: (id, amount) => api.put(`/invoices/${id}/mark-paid${amount ? `?amount=${amount}` : ''}`),
   addPayment: (id, amount) => api.put(`/invoices/${id}/add-payment?amount=${amount}`),
 };
@@ -52,7 +92,7 @@ export const salesJournalApi = {
   toggleCheckOff: (invoiceId) => api.put(`/sales-journal/check-off/${invoiceId}`),
 };
 
-// Auth API
+// Auth API (legacy password verification)
 export const authApi = {
   verifyPassword: (password) => api.post("/verify-password", { password }),
   verifyInvoicePassword: (password) => api.post("/verify-invoice-password", { password }),

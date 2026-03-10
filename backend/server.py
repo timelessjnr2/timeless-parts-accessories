@@ -1,6 +1,7 @@
-# App Version: 3.0.0 - Advanced Invoice System
-from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Query
+# App Version: 4.0.0 - User Authentication & Activity Tracking
+from fastapi import FastAPI, APIRouter, HTTPException, UploadFile, File, Form, Query, Depends, Header
 from fastapi.responses import JSONResponse
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from dotenv import load_dotenv
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
@@ -13,6 +14,8 @@ import uuid
 from datetime import datetime, timezone, timedelta
 import base64
 import hashlib
+import secrets
+import bcrypt
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / '.env')
@@ -20,12 +23,19 @@ load_dotenv(ROOT_DIR / '.env')
 # Admin password from environment variable (MUST be after load_dotenv)
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'change_me_in_production')
 INVOICE_PASSWORD = os.environ.get('INVOICE_PASSWORD', 'change_me_in_production')
+SECRET_KEY = os.environ.get('SECRET_KEY', secrets.token_hex(32))
 
 def verify_password(password: str) -> bool:
     return password == ADMIN_PASSWORD
 
 def verify_invoice_password(password: str) -> bool:
     return password == INVOICE_PASSWORD
+
+def hash_password(password: str) -> str:
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+def check_password(password: str, hashed: str) -> bool:
+    return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
 
 # MongoDB connection
 mongo_url = os.environ['MONGO_URL']
@@ -37,6 +47,51 @@ app = FastAPI(title="Timeless Parts and Accessories API")
 
 # Create a router with the /api prefix
 api_router = APIRouter(prefix="/api")
+
+# Security
+security = HTTPBearer(auto_error=False)
+
+# ==================== USER MODELS ====================
+
+class UserBase(BaseModel):
+    username: str
+    full_name: str
+    role: str = "staff"  # admin or staff
+
+class UserCreate(UserBase):
+    password: str
+
+class User(UserBase):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    is_active: bool = True
+    last_seen: Optional[datetime] = None
+    is_online: bool = False
+
+class UserLogin(BaseModel):
+    username: str
+    password: str
+
+class UserSession(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    token: str
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+    expires_at: datetime
+    is_active: bool = True
+
+class ActivityLog(BaseModel):
+    model_config = ConfigDict(extra="ignore")
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    user_id: str
+    username: str
+    action: str  # login, logout, create_invoice, delete_invoice, etc.
+    details: Optional[str] = None
+    entity_type: Optional[str] = None  # invoice, part, customer, etc.
+    entity_id: Optional[str] = None
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 # ==================== MODELS ====================
 
@@ -138,8 +193,12 @@ class Invoice(InvoiceBase):
     invoice_number: str = ""
     created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
     user: str = "Admin"
+    created_by_id: Optional[str] = None
+    created_by_name: Optional[str] = None
     checked_off: bool = False  # For Sales Journal check-off feature
     checked_off_at: Optional[datetime] = None
+    refunded_at: Optional[datetime] = None
+    refund_reason: Optional[str] = None
 
 class InvoiceUpdate(BaseModel):
     status: Optional[str] = None
@@ -149,6 +208,7 @@ class InvoiceUpdate(BaseModel):
     amount_paid: Optional[float] = None
     balance_due: Optional[float] = None
     checked_off: Optional[bool] = None
+    refund_reason: Optional[str] = None
 
 class CompanySettings(BaseModel):
     company_name: str = "Timeless Parts and Accessories"
@@ -204,6 +264,54 @@ class PasswordVerify(BaseModel):
 
 # ==================== HELPER FUNCTIONS ====================
 
+async def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(security)) -> Optional[dict]:
+    """Get current user from token, returns None if not authenticated"""
+    if not credentials:
+        return None
+    
+    token = credentials.credentials
+    session = await db.sessions.find_one({
+        "token": token,
+        "is_active": True,
+        "expires_at": {"$gt": datetime.now(timezone.utc).isoformat()}
+    }, {"_id": 0})
+    
+    if not session:
+        return None
+    
+    user = await db.users.find_one({"id": session["user_id"]}, {"_id": 0})
+    if not user:
+        return None
+    
+    # Update last seen
+    await db.users.update_one(
+        {"id": user["id"]},
+        {"$set": {"last_seen": datetime.now(timezone.utc).isoformat(), "is_online": True}}
+    )
+    
+    return user
+
+async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(security)) -> dict:
+    """Require authentication, raises 401 if not authenticated"""
+    user = await get_current_user(credentials)
+    if not user:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return user
+
+async def log_activity(user_id: str, username: str, action: str, details: str = None, entity_type: str = None, entity_id: str = None):
+    """Log user activity"""
+    log = ActivityLog(
+        user_id=user_id,
+        username=username,
+        action=action,
+        details=details,
+        entity_type=entity_type,
+        entity_id=entity_id
+    )
+    doc = log.model_dump()
+    doc['timestamp'] = doc['timestamp'].isoformat()
+    await db.activity_logs.insert_one(doc)
+
 async def get_next_invoice_number():
     settings = await db.settings.find_one({"id": "settings"}, {"_id": 0})
     if not settings:
@@ -240,6 +348,172 @@ async def init_settings():
 @api_router.get("/")
 async def root():
     return {"message": "Timeless Parts and Accessories API"}
+
+# ==================== USER AUTH ROUTES ====================
+
+@api_router.post("/auth/register")
+async def register_user(user_data: UserCreate):
+    """Register a new user (admin only in production)"""
+    # Check if username exists
+    existing = await db.users.find_one({"username": user_data.username}, {"_id": 0})
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # Create user
+    user = User(
+        username=user_data.username,
+        full_name=user_data.full_name,
+        role=user_data.role
+    )
+    doc = user.model_dump()
+    doc['password_hash'] = hash_password(user_data.password)
+    doc['created_at'] = doc['created_at'].isoformat()
+    if doc.get('last_seen'):
+        doc['last_seen'] = doc['last_seen'].isoformat()
+    
+    await db.users.insert_one(doc)
+    
+    # Log activity
+    await log_activity(user.id, user.username, "user_registered", f"New user registered: {user.full_name}")
+    
+    return {"message": "User registered successfully", "user_id": user.id}
+
+@api_router.post("/auth/login")
+async def login(credentials: UserLogin):
+    """Login and get session token"""
+    user = await db.users.find_one({"username": credentials.username}, {"_id": 0})
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    if not check_password(credentials.password, user.get('password_hash', '')):
+        raise HTTPException(status_code=401, detail="Invalid username or password")
+    
+    if not user.get('is_active', True):
+        raise HTTPException(status_code=401, detail="Account is disabled")
+    
+    # Create session
+    token = secrets.token_urlsafe(32)
+    session = UserSession(
+        user_id=user['id'],
+        token=token,
+        expires_at=datetime.now(timezone.utc) + timedelta(hours=24)
+    )
+    session_doc = session.model_dump()
+    session_doc['created_at'] = session_doc['created_at'].isoformat()
+    session_doc['expires_at'] = session_doc['expires_at'].isoformat()
+    
+    await db.sessions.insert_one(session_doc)
+    
+    # Update user online status
+    await db.users.update_one(
+        {"id": user['id']},
+        {"$set": {"is_online": True, "last_seen": datetime.now(timezone.utc).isoformat()}}
+    )
+    
+    # Log activity
+    await log_activity(user['id'], user['username'], "login", "User logged in")
+    
+    return {
+        "token": token,
+        "user": {
+            "id": user['id'],
+            "username": user['username'],
+            "full_name": user['full_name'],
+            "role": user['role']
+        }
+    }
+
+@api_router.post("/auth/logout")
+async def logout(credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Logout and invalidate session"""
+    if not credentials:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    
+    token = credentials.credentials
+    session = await db.sessions.find_one({"token": token}, {"_id": 0})
+    
+    if session:
+        # Invalidate session
+        await db.sessions.update_one({"token": token}, {"$set": {"is_active": False}})
+        
+        # Update user online status
+        await db.users.update_one(
+            {"id": session['user_id']},
+            {"$set": {"is_online": False, "last_seen": datetime.now(timezone.utc).isoformat()}}
+        )
+        
+        # Get user for logging
+        user = await db.users.find_one({"id": session['user_id']}, {"_id": 0})
+        if user:
+            await log_activity(user['id'], user['username'], "logout", "User logged out")
+    
+    return {"message": "Logged out successfully"}
+
+@api_router.get("/auth/me")
+async def get_current_user_info(user: dict = Depends(require_auth)):
+    """Get current logged in user info"""
+    return {
+        "id": user['id'],
+        "username": user['username'],
+        "full_name": user['full_name'],
+        "role": user['role'],
+        "is_online": user.get('is_online', False)
+    }
+
+@api_router.get("/auth/users")
+async def get_all_users(user: dict = Depends(require_auth)):
+    """Get all users with online status"""
+    users = await db.users.find({}, {"_id": 0, "password_hash": 0}).to_list(100)
+    
+    for u in users:
+        if isinstance(u.get('created_at'), str):
+            u['created_at'] = datetime.fromisoformat(u['created_at'])
+        if isinstance(u.get('last_seen'), str):
+            u['last_seen'] = datetime.fromisoformat(u['last_seen'])
+        
+        # Check if session is still valid (consider offline if last seen > 5 min ago)
+        if u.get('last_seen'):
+            last_seen = u['last_seen'] if isinstance(u['last_seen'], datetime) else datetime.fromisoformat(str(u['last_seen']))
+            if datetime.now(timezone.utc) - last_seen > timedelta(minutes=5):
+                u['is_online'] = False
+    
+    return users
+
+@api_router.get("/auth/activity")
+async def get_activity_logs(
+    user: dict = Depends(require_auth),
+    limit: int = 50,
+    user_id: Optional[str] = None
+):
+    """Get activity logs"""
+    query = {}
+    if user_id:
+        query["user_id"] = user_id
+    
+    logs = await db.activity_logs.find(query, {"_id": 0}).sort("timestamp", -1).limit(limit).to_list(limit)
+    
+    for log in logs:
+        if isinstance(log.get('timestamp'), str):
+            log['timestamp'] = datetime.fromisoformat(log['timestamp'])
+    
+    return logs
+
+@api_router.put("/auth/users/{user_id}/toggle-active")
+async def toggle_user_active(user_id: str, user: dict = Depends(require_auth)):
+    """Enable/disable a user account"""
+    if user['role'] != 'admin':
+        raise HTTPException(status_code=403, detail="Admin access required")
+    
+    target_user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    new_status = not target_user.get('is_active', True)
+    await db.users.update_one({"id": user_id}, {"$set": {"is_active": new_status}})
+    
+    await log_activity(user['id'], user['username'], "toggle_user", f"{'Enabled' if new_status else 'Disabled'} user: {target_user['username']}")
+    
+    return {"message": f"User {'enabled' if new_status else 'disabled'}", "is_active": new_status}
 
 @api_router.post("/verify-password")
 async def verify_admin_password(data: PasswordVerify):
@@ -602,8 +876,13 @@ async def get_invoice(invoice_id: str):
     return invoice
 
 @api_router.post("/invoices", response_model=Invoice)
-async def create_invoice(invoice: InvoiceCreate):
+async def create_invoice(invoice: InvoiceCreate, credentials: HTTPAuthorizationCredentials = Depends(security)):
     invoice_number = await get_next_invoice_number()
+    
+    # Get current user if authenticated
+    current_user = await get_current_user(credentials)
+    created_by_id = current_user['id'] if current_user else None
+    created_by_name = current_user['full_name'] if current_user else "Guest"
     
     # Calculate balance due based on down payment
     balance_due = invoice.total - (invoice.down_payment or 0) - (invoice.amount_paid or 0)
@@ -639,13 +918,18 @@ async def create_invoice(invoice: InvoiceCreate):
         invoice_number=invoice_number,
         customer_id=customer_id,
         balance_due=balance_due,
-        amount_paid=invoice.down_payment or 0
+        amount_paid=invoice.down_payment or 0,
+        created_by_id=created_by_id,
+        created_by_name=created_by_name,
+        user=created_by_name
     )
     doc = invoice_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     doc['items'] = [dict(item) for item in doc['items']]
     if doc.get('checked_off_at'):
         doc['checked_off_at'] = doc['checked_off_at'].isoformat()
+    if doc.get('refunded_at'):
+        doc['refunded_at'] = doc['refunded_at'].isoformat()
     
     # Update stock for each item
     for item in invoice.items:
@@ -655,6 +939,18 @@ async def create_invoice(invoice: InvoiceCreate):
         )
     
     await db.invoices.insert_one(doc)
+    
+    # Log activity
+    if current_user:
+        await log_activity(
+            current_user['id'], 
+            current_user['username'], 
+            "create_invoice", 
+            f"Created invoice {invoice_number} for {invoice.customer_name}",
+            "invoice",
+            invoice_obj.id
+        )
+    
     return invoice_obj
 
 @api_router.put("/invoices/{invoice_id}", response_model=Invoice)
@@ -733,8 +1029,8 @@ async def add_invoice_payment(invoice_id: str, amount: float):
     return {"message": "Payment added", "new_balance": max(0, new_balance)}
 
 @api_router.delete("/invoices/{invoice_id}")
-async def delete_invoice(invoice_id: str, password: str = Query(...)):
-    """Delete/cancel an invoice (requires invoice password)"""
+async def delete_invoice(invoice_id: str, password: str = Query(...), credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Delete an invoice (requires invoice password) - can delete cancelled invoices too"""
     if not verify_invoice_password(password):
         raise HTTPException(status_code=401, detail="Invalid invoice password")
     
@@ -742,18 +1038,32 @@ async def delete_invoice(invoice_id: str, password: str = Query(...)):
     if not existing:
         raise HTTPException(status_code=404, detail="Invoice not found")
     
-    # Restore stock for each item
-    for item in existing.get('items', []):
-        await db.parts.update_one(
-            {"id": item.get('part_id')},
-            {"$inc": {"quantity": item.get('quantity', 0)}}
-        )
+    # Only restore stock if not already cancelled (stock was already restored on cancel)
+    if existing.get('status') != 'cancelled':
+        for item in existing.get('items', []):
+            await db.parts.update_one(
+                {"id": item.get('part_id')},
+                {"$inc": {"quantity": item.get('quantity', 0)}}
+            )
     
     await db.invoices.delete_one({"id": invoice_id})
+    
+    # Log activity
+    current_user = await get_current_user(credentials)
+    if current_user:
+        await log_activity(
+            current_user['id'],
+            current_user['username'],
+            "delete_invoice",
+            f"Deleted invoice {existing.get('invoice_number')}",
+            "invoice",
+            invoice_id
+        )
+    
     return {"message": "Invoice deleted successfully"}
 
 @api_router.put("/invoices/{invoice_id}/cancel")
-async def cancel_invoice(invoice_id: str, password: str = Query(...)):
+async def cancel_invoice(invoice_id: str, password: str = Query(...), credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Cancel an invoice (requires invoice password) - keeps record but marks as cancelled"""
     if not verify_invoice_password(password):
         raise HTTPException(status_code=401, detail="Invalid invoice password")
@@ -761,6 +1071,9 @@ async def cancel_invoice(invoice_id: str, password: str = Query(...)):
     existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    if existing.get('status') == 'cancelled':
+        raise HTTPException(status_code=400, detail="Invoice is already cancelled")
     
     # Restore stock for each item
     for item in existing.get('items', []):
@@ -773,7 +1086,105 @@ async def cancel_invoice(invoice_id: str, password: str = Query(...)):
         {"id": invoice_id},
         {"$set": {"status": "cancelled"}}
     )
+    
+    # Log activity
+    current_user = await get_current_user(credentials)
+    if current_user:
+        await log_activity(
+            current_user['id'],
+            current_user['username'],
+            "cancel_invoice",
+            f"Cancelled invoice {existing.get('invoice_number')}",
+            "invoice",
+            invoice_id
+        )
+    
     return {"message": "Invoice cancelled successfully"}
+
+@api_router.put("/invoices/{invoice_id}/uncancel")
+async def uncancel_invoice(invoice_id: str, password: str = Query(...), credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Restore a cancelled invoice back to pending (requires invoice password)"""
+    if not verify_invoice_password(password):
+        raise HTTPException(status_code=401, detail="Invalid invoice password")
+    
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    if existing.get('status') != 'cancelled':
+        raise HTTPException(status_code=400, detail="Invoice is not cancelled")
+    
+    # Deduct stock again for each item
+    for item in existing.get('items', []):
+        await db.parts.update_one(
+            {"id": item.get('part_id')},
+            {"$inc": {"quantity": -item.get('quantity', 0)}}
+        )
+    
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {"status": "pending"}}
+    )
+    
+    # Log activity
+    current_user = await get_current_user(credentials)
+    if current_user:
+        await log_activity(
+            current_user['id'],
+            current_user['username'],
+            "uncancel_invoice",
+            f"Restored invoice {existing.get('invoice_number')} from cancelled to pending",
+            "invoice",
+            invoice_id
+        )
+    
+    return {"message": "Invoice restored to pending"}
+
+@api_router.put("/invoices/{invoice_id}/refund")
+async def refund_invoice(invoice_id: str, password: str = Query(...), reason: Optional[str] = None, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    """Refund an invoice (requires invoice password)"""
+    if not verify_invoice_password(password):
+        raise HTTPException(status_code=401, detail="Invalid invoice password")
+    
+    existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
+    if not existing:
+        raise HTTPException(status_code=404, detail="Invoice not found")
+    
+    if existing.get('status') == 'refunded':
+        raise HTTPException(status_code=400, detail="Invoice is already refunded")
+    
+    if existing.get('status') == 'cancelled':
+        raise HTTPException(status_code=400, detail="Cannot refund a cancelled invoice")
+    
+    # Restore stock for each item
+    for item in existing.get('items', []):
+        await db.parts.update_one(
+            {"id": item.get('part_id')},
+            {"$inc": {"quantity": item.get('quantity', 0)}}
+        )
+    
+    await db.invoices.update_one(
+        {"id": invoice_id},
+        {"$set": {
+            "status": "refunded",
+            "refunded_at": datetime.now(timezone.utc).isoformat(),
+            "refund_reason": reason
+        }}
+    )
+    
+    # Log activity
+    current_user = await get_current_user(credentials)
+    if current_user:
+        await log_activity(
+            current_user['id'],
+            current_user['username'],
+            "refund_invoice",
+            f"Refunded invoice {existing.get('invoice_number')}" + (f": {reason}" if reason else ""),
+            "invoice",
+            invoice_id
+        )
+    
+    return {"message": "Invoice refunded successfully"}
 
 @api_router.delete("/invoices/clear-all")
 async def clear_all_invoices():

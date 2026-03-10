@@ -131,7 +131,7 @@ export default function InvoicePrint() {
                   </tr>
                   <tr>
                     <td className="font-semibold text-slate-600 py-1">User</td>
-                    <td>{invoice.user || "Admin"}</td>
+                    <td>{invoice.created_by_name || invoice.user || "Admin"}</td>
                   </tr>
                   <tr>
                     <td className="font-semibold text-slate-600 py-1">Status</td>
@@ -141,6 +141,8 @@ export default function InvoicePrint() {
                           ? 'bg-green-100 text-green-800' 
                           : invoice.status === 'cancelled'
                           ? 'bg-red-100 text-red-800'
+                          : invoice.status === 'refunded'
+                          ? 'bg-purple-100 text-purple-800'
                           : 'bg-yellow-100 text-yellow-800'
                       }`}>
                         {invoice.status?.toUpperCase()}
