@@ -657,7 +657,7 @@ async def get_part(part_id: str):
     return part
 
 @api_router.post("/parts", response_model=Part)
-async def create_part(part: PartCreate):
+async def create_part(part: PartCreate, credentials: HTTPAuthorizationCredentials = Depends(security)):
     part_obj = Part(**part.model_dump())
     doc = part_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
@@ -665,10 +665,16 @@ async def create_part(part: PartCreate):
     doc['compatible_vehicles'] = [dict(v) for v in doc['compatible_vehicles']]
     
     await db.parts.insert_one(doc)
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "create_part", f"Added part: {part.name} ({part.part_number})", "part", part_obj.id)
+    
     return part_obj
 
 @api_router.put("/parts/{part_id}", response_model=Part)
-async def update_part(part_id: str, part_update: PartUpdate):
+async def update_part(part_id: str, part_update: PartUpdate, credentials: HTTPAuthorizationCredentials = Depends(security)):
     existing = await db.parts.find_one({"id": part_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Part not found")
@@ -687,17 +693,29 @@ async def update_part(part_id: str, part_update: PartUpdate):
     if isinstance(updated.get('updated_at'), str):
         updated['updated_at'] = datetime.fromisoformat(updated['updated_at'])
     
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "update_part", f"Updated part: {existing.get('name')}", "part", part_id)
+    
     return updated
 
 @api_router.delete("/parts/{part_id}")
-async def delete_part(part_id: str):
+async def delete_part(part_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    existing = await db.parts.find_one({"id": part_id}, {"_id": 0})
     result = await db.parts.delete_one({"id": part_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Part not found")
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user and existing:
+        await log_activity(user['id'], user['username'], "delete_part", f"Deleted part: {existing.get('name')}", "part", part_id)
+    
     return {"message": "Part deleted successfully"}
 
 @api_router.post("/parts/{part_id}/adjust-stock")
-async def adjust_stock(part_id: str, adjustment: int):
+async def adjust_stock(part_id: str, adjustment: int, credentials: HTTPAuthorizationCredentials = Depends(security)):
     part = await db.parts.find_one({"id": part_id}, {"_id": 0})
     if not part:
         raise HTTPException(status_code=404, detail="Part not found")
@@ -710,6 +728,12 @@ async def adjust_stock(part_id: str, adjustment: int):
         {"id": part_id},
         {"$set": {"quantity": new_quantity, "updated_at": datetime.now(timezone.utc).isoformat()}}
     )
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        action = "increase_stock" if adjustment > 0 else "decrease_stock"
+        await log_activity(user['id'], user['username'], action, f"Adjusted stock for {part.get('name')}: {'+' if adjustment > 0 else ''}{adjustment} (new qty: {new_quantity})", "part", part_id)
     
     return {"message": "Stock adjusted", "new_quantity": new_quantity}
 
@@ -794,16 +818,22 @@ async def get_customer_invoices(customer_id: str, skip: int = 0, limit: int = 50
     }
 
 @api_router.post("/customers", response_model=Customer)
-async def create_customer(customer: CustomerCreate):
+async def create_customer(customer: CustomerCreate, credentials: HTTPAuthorizationCredentials = Depends(security)):
     customer_obj = Customer(**customer.model_dump())
     doc = customer_obj.model_dump()
     doc['created_at'] = doc['created_at'].isoformat()
     
     await db.customers.insert_one(doc)
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "create_customer", f"Added customer: {customer.name}", "customer", customer_obj.id)
+    
     return customer_obj
 
 @api_router.put("/customers/{customer_id}", response_model=Customer)
-async def update_customer(customer_id: str, customer_update: CustomerUpdate):
+async def update_customer(customer_id: str, customer_update: CustomerUpdate, credentials: HTTPAuthorizationCredentials = Depends(security)):
     existing = await db.customers.find_one({"id": customer_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Customer not found")
@@ -816,13 +846,25 @@ async def update_customer(customer_id: str, customer_update: CustomerUpdate):
     if isinstance(updated.get('created_at'), str):
         updated['created_at'] = datetime.fromisoformat(updated['created_at'])
     
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "update_customer", f"Updated customer: {existing.get('name')}", "customer", customer_id)
+    
     return updated
 
 @api_router.delete("/customers/{customer_id}")
-async def delete_customer(customer_id: str):
+async def delete_customer(customer_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    existing = await db.customers.find_one({"id": customer_id}, {"_id": 0})
     result = await db.customers.delete_one({"id": customer_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Customer not found")
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user and existing:
+        await log_activity(user['id'], user['username'], "delete_customer", f"Deleted customer: {existing.get('name')}", "customer", customer_id)
+    
     return {"message": "Customer deleted successfully"}
 
 # ---- Invoice Routes ----
@@ -954,7 +996,7 @@ async def create_invoice(invoice: InvoiceCreate, credentials: HTTPAuthorizationC
     return invoice_obj
 
 @api_router.put("/invoices/{invoice_id}", response_model=Invoice)
-async def update_invoice(invoice_id: str, invoice_update: InvoiceUpdate):
+async def update_invoice(invoice_id: str, invoice_update: InvoiceUpdate, credentials: HTTPAuthorizationCredentials = Depends(security)):
     existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not existing:
         raise HTTPException(status_code=404, detail="Invoice not found")
@@ -985,10 +1027,15 @@ async def update_invoice(invoice_id: str, invoice_update: InvoiceUpdate):
     if isinstance(updated.get('created_at'), str):
         updated['created_at'] = datetime.fromisoformat(updated['created_at'])
     
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "update_invoice", f"Updated invoice {existing.get('invoice_number')}", "invoice", invoice_id)
+    
     return updated
 
 @api_router.put("/invoices/{invoice_id}/mark-paid")
-async def mark_invoice_paid(invoice_id: str, amount: Optional[float] = None):
+async def mark_invoice_paid(invoice_id: str, amount: Optional[float] = None, credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Mark an invoice as paid"""
     existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not existing:
@@ -1002,10 +1049,16 @@ async def mark_invoice_paid(invoice_id: str, amount: Optional[float] = None):
     }
     
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "mark_invoice_paid", f"Marked invoice {existing.get('invoice_number')} as paid", "invoice", invoice_id)
+    
     return {"message": "Invoice marked as paid"}
 
 @api_router.put("/invoices/{invoice_id}/add-payment")
-async def add_invoice_payment(invoice_id: str, amount: float):
+async def add_invoice_payment(invoice_id: str, amount: float, credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Add a payment to an invoice"""
     existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not existing:
@@ -1026,6 +1079,12 @@ async def add_invoice_payment(invoice_id: str, amount: float):
         update_data['status'] = 'paid'
     
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "add_payment", f"Added payment ${amount:,.2f} to invoice {existing.get('invoice_number')}", "invoice", invoice_id)
+    
     return {"message": "Payment added", "new_balance": max(0, new_balance)}
 
 @api_router.delete("/invoices/{invoice_id}")
@@ -1234,7 +1293,7 @@ async def get_sales_journal(date: Optional[str] = None):
     }
 
 @api_router.put("/sales-journal/check-off/{invoice_id}")
-async def toggle_invoice_check_off(invoice_id: str):
+async def toggle_invoice_check_off(invoice_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
     """Toggle check-off status for an invoice in the sales journal"""
     existing = await db.invoices.find_one({"id": invoice_id}, {"_id": 0})
     if not existing:
@@ -1249,6 +1308,13 @@ async def toggle_invoice_check_off(invoice_id: str):
     }
     
     await db.invoices.update_one({"id": invoice_id}, {"$set": update_data})
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        action = "check_off_invoice" if new_status else "uncheck_invoice"
+        await log_activity(user['id'], user['username'], action, f"{'Checked off' if new_status else 'Unchecked'} invoice {existing.get('invoice_number')} in sales journal", "invoice", invoice_id)
+    
     return {"message": f"Invoice {'checked off' if new_status else 'unchecked'}", "checked_off": new_status}
 
 @api_router.get("/sales-journal/dates")
@@ -1281,30 +1347,48 @@ async def get_settings():
     return settings
 
 @api_router.put("/settings/company")
-async def update_company_settings(company: CompanySettings):
+async def update_company_settings(company: CompanySettings, credentials: HTTPAuthorizationCredentials = Depends(security)):
     await db.settings.update_one(
         {"id": "settings"},
         {"$set": {"company": company.model_dump()}},
         upsert=True
     )
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "update_settings", "Updated company settings", "settings", "company")
+    
     return {"message": "Company settings updated"}
 
 @api_router.put("/settings/policies")
-async def update_policy_settings(policies: PolicySettings):
+async def update_policy_settings(policies: PolicySettings, credentials: HTTPAuthorizationCredentials = Depends(security)):
     await db.settings.update_one(
         {"id": "settings"},
         {"$set": {"policies": policies.model_dump()}},
         upsert=True
     )
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "update_settings", "Updated policy settings", "settings", "policies")
+    
     return {"message": "Policy settings updated"}
 
 @api_router.put("/settings/tax")
-async def update_tax_settings(tax_rate: float, tax_name: str = "GCT"):
+async def update_tax_settings(tax_rate: float, tax_name: str = "GCT", credentials: HTTPAuthorizationCredentials = Depends(security)):
     await db.settings.update_one(
         {"id": "settings"},
         {"$set": {"company.tax_rate": tax_rate, "company.tax_name": tax_name}},
         upsert=True
     )
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "update_settings", f"Updated tax rate to {tax_rate}% ({tax_name})", "settings", "tax")
+    
     return {"message": "Tax settings updated"}
 
 # ---- Vehicle Routes ----
@@ -1315,17 +1399,30 @@ async def get_vehicles():
     return vehicles
 
 @api_router.post("/vehicles", response_model=Vehicle)
-async def create_vehicle(vehicle: VehicleCreate):
+async def create_vehicle(vehicle: VehicleCreate, credentials: HTTPAuthorizationCredentials = Depends(security)):
     vehicle_obj = Vehicle(**vehicle.model_dump())
     doc = vehicle_obj.model_dump()
     await db.vehicles.insert_one(doc)
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user:
+        await log_activity(user['id'], user['username'], "create_vehicle", f"Added vehicle: {vehicle.make} {vehicle.model}", "vehicle", vehicle_obj.id)
+    
     return vehicle_obj
 
 @api_router.delete("/vehicles/{vehicle_id}")
-async def delete_vehicle(vehicle_id: str):
+async def delete_vehicle(vehicle_id: str, credentials: HTTPAuthorizationCredentials = Depends(security)):
+    existing = await db.vehicles.find_one({"id": vehicle_id}, {"_id": 0})
     result = await db.vehicles.delete_one({"id": vehicle_id})
     if result.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Vehicle not found")
+    
+    # Log activity
+    user = await get_current_user(credentials)
+    if user and existing:
+        await log_activity(user['id'], user['username'], "delete_vehicle", f"Deleted vehicle: {existing.get('make')} {existing.get('model')}", "vehicle", vehicle_id)
+    
     return {"message": "Vehicle deleted successfully"}
 
 @api_router.get("/vehicles/makes")
