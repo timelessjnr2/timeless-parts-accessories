@@ -8,10 +8,11 @@ Create an internal company inventory management app called "Timeless Parts and A
 - **Backend**: FastAPI with Python
 - **Database**: MongoDB
 - **Hosting**: Kubernetes container environment
+- **Authentication**: JWT-based session tokens with bcrypt password hashing
 
 ## User Personas
-- **Internal Staff**: Company employees managing inventory, creating invoices, and tracking customers
-- **Admin**: Single user mode (password protection for sensitive actions)
+- **Admin**: Can manage all users, view activity logs, perform all operations
+- **Staff**: Can perform day-to-day operations (create invoices, manage inventory)
 
 ## Company Information
 - **Name**: Timeless Parts and Accessories
@@ -28,12 +29,14 @@ Create an internal company inventory management app called "Timeless Parts and A
 6. Low stock alerts
 7. Sales and inventory reports/analytics
 8. Editable tax settings (GCT, default 0%)
+9. **User authentication system with online/offline tracking**
+10. **Activity logging for audit trail**
 
 ## What's Been Implemented
 
 ### Phase 1 - Core Features (Complete)
 - [x] Parts inventory management with CRUD operations
-- [x] Customer database management
+- [x] Customer database management with discounts
 - [x] Invoice creation and printing
 - [x] Dashboard with stats and alerts
 - [x] Low stock alerts
@@ -45,7 +48,7 @@ Create an internal company inventory management app called "Timeless Parts and A
 - [x] Red/white theme
 
 ### Phase 2 - Advanced Invoice System (Complete - March 9, 2026)
-- [x] Invoice status system (Pending, Paid, Cancelled)
+- [x] Invoice status system (Pending, Paid, Cancelled, Refunded)
 - [x] Down payment support with balance calculation
 - [x] Invoice number format: TA-XX (short format)
 - [x] Delete/Cancel invoices with separate password (19752)
@@ -54,17 +57,35 @@ Create an internal company inventory management app called "Timeless Parts and A
 - [x] Auto-save new customers from invoices
 - [x] Customer-specific discount percentages
 - [x] Customer invoice history view
-- [x] **Sales Journal** - Daily transaction summary with check-off feature
+- [x] Sales Journal - Daily transaction summary with check-off feature
+
+### Phase 3 - User Authentication & Activity Tracking (Complete - March 10, 2026)
+- [x] User login system with individual usernames/passwords
+- [x] User registration (Admin can add new users)
+- [x] Online/offline status indicators
+- [x] Activity logging (who did what, when)
+- [x] Invoice creator tracking (shows who created each invoice)
+- [x] **Refund invoices** - Return paid invoices to stock
+- [x] **Uncancel invoices** - Restore cancelled invoices
+- [x] Protected routes (require login)
+- [x] Session management with logout
 
 ## Key Features
 
+### User System
+- **Users**: Support for ~4 staff members
+- **Roles**: Admin (full access) and Staff (day-to-day operations)
+- **Online Status**: Green dot indicator, "Online now" vs time since last seen
+- **Activity Log**: Records all actions with timestamps
+
 ### Invoice System
-- **Status**: Pending, Paid, Cancelled (defaults to Pending)
+- **Status**: Pending, Paid, Cancelled, Refunded (defaults to Pending)
 - **Down Payments**: Record partial payments, shows balance due
 - **Invoice Numbers**: TA-01, TA-02, etc. (short format)
+- **Creator Tracking**: Shows which user created each invoice
 - **Password Protection**: 
-  - General edit/delete: `timeless532002`
-  - Invoice delete/cancel: `19752`
+  - User login: Individual per user
+  - Invoice operations (delete/cancel/refund/uncancel): `19752`
 
 ### Customer Management
 - Basic info: Name, Phone, Email, Address
@@ -80,6 +101,15 @@ Create an internal company inventory management app called "Timeless Parts and A
 
 ## API Endpoints
 
+### User Auth APIs
+- `POST /api/auth/login` - User login
+- `POST /api/auth/logout` - User logout
+- `POST /api/auth/register` - Register new user
+- `GET /api/auth/me` - Get current user
+- `GET /api/auth/users` - Get all users with online status
+- `GET /api/auth/activity` - Get activity logs
+- `PUT /api/auth/users/{id}/toggle-active` - Enable/disable user
+
 ### Core APIs
 - `GET, POST /api/parts` - Parts CRUD
 - `GET, POST /api/customers` - Customers CRUD
@@ -87,46 +117,43 @@ Create an internal company inventory management app called "Timeless Parts and A
 - `GET, POST /api/invoices` - Invoices CRUD
 - `PUT /api/invoices/{id}/mark-paid` - Mark invoice as paid
 - `PUT /api/invoices/{id}/add-payment` - Add payment to invoice
-- `DELETE /api/invoices/{id}?password=X` - Delete invoice (requires password)
-- `PUT /api/invoices/{id}/cancel?password=X` - Cancel invoice (requires password)
-- `GET, PUT /api/settings` - Settings management
+- `PUT /api/invoices/{id}/refund?password=X` - Refund invoice
+- `PUT /api/invoices/{id}/uncancel?password=X` - Restore cancelled invoice
+- `DELETE /api/invoices/{id}?password=X` - Delete invoice
+- `PUT /api/invoices/{id}/cancel?password=X` - Cancel invoice
 
 ### Sales Journal APIs
 - `GET /api/sales-journal?date=YYYY-MM-DD` - Daily transactions
 - `GET /api/sales-journal/dates` - Available dates with totals
 - `PUT /api/sales-journal/check-off/{invoice_id}` - Toggle check-off
 
-### Authentication APIs
-- `POST /api/verify-password` - Verify admin password
-- `POST /api/verify-invoice-password` - Verify invoice password
-
 ## Database Schema
 
-### Parts
+### Users
 ```json
 {
   "id": "uuid",
-  "name": "string",
-  "part_number": "string",
-  "price": "float",
-  "cost_price": "float",
-  "quantity": "int",
-  "min_stock_level": "int",
-  "category": "string",
-  "image_url": "string",
-  "compatible_vehicles": [{"make", "model", "year_start", "year_end"}]
+  "username": "string",
+  "password_hash": "bcrypt hash",
+  "full_name": "string",
+  "role": "admin|staff",
+  "is_active": "bool",
+  "is_online": "bool",
+  "last_seen": "datetime"
 }
 ```
 
-### Customers
+### Activity Logs
 ```json
 {
   "id": "uuid",
-  "name": "string",
-  "phone": "string",
-  "email": "string",
-  "address": "string",
-  "discount_percentage": "float"
+  "user_id": "uuid",
+  "username": "string",
+  "action": "string (login, create_invoice, etc)",
+  "details": "string",
+  "entity_type": "string (invoice, part, etc)",
+  "entity_id": "uuid",
+  "timestamp": "datetime"
 }
 ```
 
@@ -137,54 +164,46 @@ Create an internal company inventory management app called "Timeless Parts and A
   "invoice_number": "TA-XX",
   "customer_id": "uuid",
   "customer_name": "string",
-  "items": [{"part_id", "name", "quantity", "unit_price", "total"}],
-  "subtotal": "float",
-  "discount": "float",
-  "tax_rate": "float",
-  "tax_amount": "float",
+  "items": [...],
   "total": "float",
-  "status": "pending|paid|cancelled",
+  "status": "pending|paid|cancelled|refunded",
   "down_payment": "float",
-  "amount_paid": "float",
   "balance_due": "float",
-  "checked_off": "bool",
-  "checked_off_at": "datetime"
+  "created_by_id": "uuid",
+  "created_by_name": "string",
+  "refunded_at": "datetime",
+  "refund_reason": "string"
 }
 ```
+
+## Credentials
+
+### Default Admin User
+- **Username**: admin
+- **Password**: timeless532002
+
+### Invoice Operations Password
+- **Password**: 19752 (for delete, cancel, refund, uncancel)
 
 ## Prioritized Backlog
 
 ### P0 (Critical) - COMPLETE
-- [x] Parts inventory management
-- [x] Customer database
-- [x] Invoice creation and printing
-- [x] Dashboard with stats
-- [x] Invoice status system
-- [x] Down payments
-- [x] Sales Journal
+All P0 features have been implemented
 
 ### P1 (High Priority) - COMPLETE
-- [x] Low stock alerts
-- [x] Sales reports
-- [x] Editable policies
-- [x] Tax settings
-- [x] PWA support
-- [x] Mobile-responsive design
-- [x] Password protection
+All P1 features have been implemented
 
 ### P2 (Medium Priority) - Future
 - [ ] Export invoices to PDF
 - [ ] Email invoices to customers
 - [ ] Barcode/QR code scanning for parts
-- [ ] Multiple user accounts with roles
 - [ ] Inventory import/export (CSV)
 - [ ] Profit margin reports
 
-## Next Tasks
-1. User testing and feedback collection
-2. Bug fixes based on user feedback
-3. Consider PDF export feature
-4. Consider email invoice feature
+## Test Reports
+- `/app/test_reports/iteration_2.json` - Invoice system tests (24/24 passed)
+- `/app/test_reports/iteration_3.json` - User auth tests (22/22 passed)
+- `/app/backend/tests/test_user_auth.py` - Auth test suite
 
 ## Known Issues
 - Browser/PWA caching may delay updates on deployed production app
