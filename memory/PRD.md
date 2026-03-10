@@ -68,6 +68,7 @@ Create an internal company inventory management app called "Timeless Parts and A
 - [x] Invoice creator tracking (shows who created each invoice)
 - [x] Protected routes (require login)
 - [x] Session management with logout
+- [x] **Delete user accounts** - With password protection (19752)
 
 ### Phase 4 - Comprehensive Activity Logging (Complete - March 10, 2026)
 - [x] **Login/Logout tracking**
@@ -89,7 +90,7 @@ Create an internal company inventory management app called "Timeless Parts and A
 ### Activity Logging - Tracked Actions
 | Category | Actions Tracked |
 |----------|-----------------|
-| Auth | login, logout, user_registered |
+| Auth | login, logout, user_registered, delete_user |
 | Parts | create_part, update_part, delete_part, increase_stock, decrease_stock |
 | Customers | create_customer, update_customer, delete_customer |
 | Invoices | create_invoice, update_invoice, delete_invoice, cancel_invoice, uncancel_invoice, refund_invoice, mark_invoice_paid, add_payment |
@@ -115,6 +116,7 @@ Create an internal company inventory management app called "Timeless Parts and A
 - `GET /api/auth/me` - Get current user
 - `GET /api/auth/users` - Get all users with online status
 - `GET /api/auth/activity` - Get activity logs
+- `DELETE /api/auth/users/{id}?password=X` - Delete user account (requires password 19752)
 
 ## Database Schema
 

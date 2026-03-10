@@ -8,6 +8,7 @@ import {
   Circle,
   Activity,
   Power,
+  Trash2,
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -53,6 +54,9 @@ export default function UserManagement() {
   const [activityLogs, setActivityLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState(null);
+  const [deletePassword, setDeletePassword] = useState('');
   const [formData, setFormData] = useState({
     username: '',
     password: '',
@@ -109,6 +113,30 @@ export default function UserManagement() {
     }
   };
 
+  const handleDeleteUser = (user) => {
+    setUserToDelete(user);
+    setDeletePassword('');
+    setDeleteDialogOpen(true);
+  };
+
+  const confirmDeleteUser = async () => {
+    if (!deletePassword) {
+      toast.error('Please enter password');
+      return;
+    }
+    
+    try {
+      await userAuthApi.deleteUser(userToDelete.id, deletePassword);
+      toast.success(`User ${userToDelete.username} deleted successfully`);
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+      setDeletePassword('');
+      fetchData();
+    } catch (error) {
+      toast.error(error.response?.data?.detail || 'Failed to delete user');
+    }
+  };
+
   const getActionBadge = (action) => {
     const colors = {
       login: 'bg-green-100 text-green-800',
@@ -118,6 +146,21 @@ export default function UserManagement() {
       cancel_invoice: 'bg-orange-100 text-orange-800',
       refund_invoice: 'bg-purple-100 text-purple-800',
       uncancel_invoice: 'bg-teal-100 text-teal-800',
+      delete_user: 'bg-red-100 text-red-800',
+      user_registered: 'bg-blue-100 text-blue-800',
+      create_part: 'bg-green-100 text-green-800',
+      update_part: 'bg-yellow-100 text-yellow-800',
+      delete_part: 'bg-red-100 text-red-800',
+      increase_stock: 'bg-green-100 text-green-800',
+      decrease_stock: 'bg-orange-100 text-orange-800',
+      create_customer: 'bg-green-100 text-green-800',
+      update_customer: 'bg-yellow-100 text-yellow-800',
+      delete_customer: 'bg-red-100 text-red-800',
+      update_settings: 'bg-purple-100 text-purple-800',
+      mark_invoice_paid: 'bg-green-100 text-green-800',
+      add_payment: 'bg-blue-100 text-blue-800',
+      check_off_invoice: 'bg-teal-100 text-teal-800',
+      uncheck_invoice: 'bg-gray-100 text-gray-800',
     };
     return colors[action] || 'bg-gray-100 text-gray-800';
   };
@@ -277,13 +320,25 @@ export default function UserManagement() {
                         {currentUser?.role === 'admin' && (
                           <TableCell className="text-right">
                             {u.id !== currentUser?.id && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                onClick={() => handleToggleActive(u.id)}
-                              >
-                                <Power className={`h-4 w-4 ${u.is_active !== false ? 'text-green-600' : 'text-red-600'}`} />
-                              </Button>
+                              <div className="flex items-center justify-end gap-1">
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleToggleActive(u.id)}
+                                  title={u.is_active !== false ? 'Disable user' : 'Enable user'}
+                                >
+                                  <Power className={`h-4 w-4 ${u.is_active !== false ? 'text-green-600' : 'text-red-600'}`} />
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteUser(u)}
+                                  title="Delete user"
+                                  data-testid={`delete-user-${u.id}`}
+                                >
+                                  <Trash2 className="h-4 w-4 text-red-600" />
+                                </Button>
+                              </div>
                             )}
                           </TableCell>
                         )}
@@ -406,6 +461,46 @@ export default function UserManagement() {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete User Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="text-destructive">Delete User Account</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p>
+              Are you sure you want to permanently delete <strong>{userToDelete?.full_name}</strong>'s account ({userToDelete?.username})?
+            </p>
+            <p className="text-sm text-muted-foreground">
+              This action cannot be undone. All of the user's session data will be removed.
+            </p>
+            <div className="space-y-2">
+              <Label>Enter Password to Confirm</Label>
+              <Input
+                type="password"
+                value={deletePassword}
+                onChange={(e) => setDeletePassword(e.target.value)}
+                placeholder="Enter password..."
+                data-testid="delete-user-password"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDeleteUser}
+              disabled={!deletePassword}
+              data-testid="confirm-delete-user-btn"
+            >
+              Delete Account
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

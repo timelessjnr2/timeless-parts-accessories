@@ -46,6 +46,7 @@ export const userAuthApi = {
   getActivityLogs: (limit = 50, userId = null) => 
     api.get(`/auth/activity?limit=${limit}${userId ? `&user_id=${userId}` : ''}`),
   toggleUserActive: (userId) => api.put(`/auth/users/${userId}/toggle-active`),
+  deleteUser: (userId, password) => api.delete(`/auth/users/${userId}?password=${encodeURIComponent(password)}`),
 };
 
 // Parts API

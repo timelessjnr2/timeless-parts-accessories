@@ -515,6 +515,31 @@ async def toggle_user_active(user_id: str, user: dict = Depends(require_auth)):
     
     return {"message": f"User {'enabled' if new_status else 'disabled'}", "is_active": new_status}
 
+@api_router.delete("/auth/users/{user_id}")
+async def delete_user(user_id: str, password: str = Query(...), user: dict = Depends(require_auth)):
+    """Delete a user account (requires invoice password 19752)"""
+    if not verify_invoice_password(password):
+        raise HTTPException(status_code=401, detail="Invalid password")
+    
+    target_user = await db.users.find_one({"id": user_id}, {"_id": 0})
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Can't delete yourself
+    if user_id == user['id']:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # Delete user's sessions
+    await db.sessions.delete_many({"user_id": user_id})
+    
+    # Delete user
+    await db.users.delete_one({"id": user_id})
+    
+    # Log activity
+    await log_activity(user['id'], user['username'], "delete_user", f"Deleted user: {target_user['username']}", "user", user_id)
+    
+    return {"message": f"User {target_user['username']} deleted successfully"}
+
 @api_router.post("/verify-password")
 async def verify_admin_password(data: PasswordVerify):
     if verify_password(data.password):
